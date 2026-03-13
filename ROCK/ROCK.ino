@@ -39,6 +39,7 @@ uint16_t eyeBuf[DIAM * DIAM];
 float   fx = 0.0f, fy = 0.0f;
 int16_t prevPx = 0, prevPy = 0;
 bool    forceRedraw = false;
+float   axBias = 0.0f, ayBias = 0.0f;
 
 unsigned long lastSensorPrint = 0;
 bool ahtOk = false;
@@ -136,6 +137,18 @@ void setup() {
   mpu.setFilterBandwidth(MPU6050_BAND_260_HZ);
 
   ahtOk = aht.begin();
+
+  // Calibrate IMU: average 32 samples at rest to find resting bias
+  float sumX = 0.0f, sumY = 0.0f;
+  for (int i = 0; i < 32; i++) {
+    sensors_event_t a, g, t;
+    mpu.getEvent(&a, &g, &t);
+    sumX += a.acceleration.y;
+    sumY += -a.acceleration.x;
+    delay(5);
+  }
+  axBias = sumX / 32.0f;
+  ayBias = sumY / 32.0f;
 }
 
 // --- Loop ---
@@ -150,8 +163,8 @@ void loop() {
     fx = fy = 0.0f;
     iPx = iPy = 0;
   } else {
-    float ax = a.acceleration.y;
-    float ay = -a.acceleration.x;
+    float ax = a.acceleration.y  - axBias;
+    float ay = -a.acceleration.x - ayBias;
     int16_t maxOffset = EYE_R - PUPIL_R - OUTLINE - 2;
     float dx = constrain( ax * SCALE, -maxOffset, maxOffset);
     float dy = constrain(-ay * SCALE, -maxOffset, maxOffset);
