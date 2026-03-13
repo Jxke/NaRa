@@ -9,6 +9,7 @@ Arduino sketches for the Arduino UNO Q, developed and deployed over WiFi using `
 | GC9A01 Round Display (240×240) | SPI | SCK=13, MOSI=11, DC=10, CS=9, RST=8 |
 | MPU-6050 IMU | I2C | SDA, SCL |
 | AHT20 Temp/Humidity Sensor | I2C | SDA, SCL |
+| Talk Button | GPIO | D2 (active low, internal pull-up) |
 
 ## Structure
 
@@ -26,14 +27,20 @@ ROCK/
 ## Sketches
 
 ### Eyes (main)
-Animated googly eyes on the GC9A01 circular display, driven by the MPU-6050 IMU. Tilt the board to move the pupils. Also prints temperature and humidity from the AHT20 over Serial at 1 Hz.
+Animated googly eyes on the GC9A01 circular display, driven by the MPU-6050 IMU. Tilt the board to move the pupils. Part of the Ambient AI system — communicates with the Debian side via the Arduino Router Bridge.
 
-**Libraries:** Adafruit GC9A01A, Adafruit GFX, Adafruit MPU6050, Adafruit AHTX0, Adafruit Unified Sensor
+**Libraries:** Adafruit GC9A01A, Adafruit GFX, Adafruit MPU6050, Adafruit AHTX0, Adafruit Unified Sensor, Arduino_RouterBridge, MsgPack
 
 **How it works:**
 - Accelerometer X/Y axes are smoothed with an exponential moving average (α=0.6) to simulate googly eye physics
 - Each eye is rendered into a 111×111 pixel RAM framebuffer and pushed to the display in a single `drawRGBBitmap` call, eliminating scan line artifacts
 - Only redraws when the pupil position changes by ≥1 pixel
+
+**Ambient AI integration:**
+- `TEMP:<val>` and `HUM:<val>` lines sent via `Monitor` every second
+- Button on D2 (active low): hold to send `MIC:START`, release to send `MIC:STOP`
+- `show_emoji(bytes)` RPC: receives 40×40 RGB565 pixel data from Debian, renders it in the pupils (centred, IMU frozen) for 10 seconds
+- `clear_emoji()` RPC: returns to normal googly eyes
 
 ### Sensor test/
 - **Sensor test.ino** — reads AHT20 temp & humidity, prints over Serial every 2s
