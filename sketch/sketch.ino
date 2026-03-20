@@ -4,15 +4,18 @@
  * Hardware:
  *   GC9A01  240x240 round TFT:  SCK=13 MOSI=11 CS=10 DC=9 RST=8
  *   AHT20   temp/humidity:      I2C default (SCL, SDA, 3.3V, GND)
+ *   Mic:                        A0 (electret, DC ~2048 @ 12-bit ADC)
  *   Button:                     D2 (active-low, internal pull-up)
- *   USB mic:                    plughw:0,0 (recorded on Linux side)
  *
- * Bridge RPC handlers:
+ * Bridge RPC handlers (Linux → MCU):
  *   show_emoji(bin)  — 3200 bytes RGB565 40x40, scaled 6x to 240x240
  *   clear_emoji()    — return to idle face
  *
+ * Bridge notifications (MCU → Linux):
+ *   notify("audio", int8[128]) — signed 8-bit PCM, 8 kHz, mono
+ *
  * Monitor output:
- *   TEMP:xx.x  HUM:xx.x  MIC:START  MIC:STOP
+ *   TEMP:xx.x  HUM:xx.x  READY
  */
 
 #include <Arduino_RouterBridge.h>
@@ -48,7 +51,6 @@ static volatile bool emojiClearFlag = false;
 
 // ---- Button state ----
 static bool lastBtnState = false;
-static bool micActive = false;
 static unsigned long lastDebounce = 0;
 static const unsigned long DEBOUNCE_MS = 50;
 
@@ -56,6 +58,31 @@ static const unsigned long DEBOUNCE_MS = 50;
 static unsigned long lastSensorTime = 0;
 static const unsigned long SENSOR_INTERVAL_MS = 2000;
 static bool ahtReady = false;
+
+// ---- Audio streaming ----
+#define SAMPLE_RATE    8000
+#define AUDIO_BUFSIZE  128
+#define US_PER_SAMPLE  (1000000UL / SAMPLE_RATE)   // 125 µs
+
+static float   dcEst     = 2048.0f;
+static float   smoothed  = 0.0f;
+static int8_t  audioBuf[AUDIO_BUFSIZE];
+static int     audioBufIdx  = 0;
+static uint32_t nextSampleUs = 0;
+
+// ================================================================
+// voiceFilter — DC removal + noise gate + low-pass + gain
+// ================================================================
+static int16_t voiceFilter(int raw) {
+  dcEst    = 0.995f * dcEst + 0.005f * (float)raw;
+  float c  = (float)raw - dcEst;
+  if (fabsf(c) < 12.0f) c = 0.0f;
+  smoothed = 0.65f * smoothed + 0.35f * c;
+  float s  = smoothed * 10.0f;
+  if (s >  32767.0f) s =  32767.0f;
+  if (s < -32768.0f) s = -32768.0f;
+  return (int16_t)s;
+}
 
 // ================================================================
 // GC9A01 raw SPI driver
@@ -131,7 +158,6 @@ static void tftDrawPixel(uint16_t x, uint16_t y, uint16_t color) {
 }
 
 static void tftFillCircle(int16_t cx, int16_t cy, int16_t r, uint16_t color) {
-  // Scanline fill
   for (int16_t dy = -r; dy <= r; dy++) {
     int16_t dx = (int16_t)sqrt((float)(r * r - dy * dy));
     int16_t x0 = cx - dx;
@@ -151,7 +177,6 @@ static void tftInit() {
   pinMode(TFT_DC, OUTPUT);
   pinMode(TFT_RST, OUTPUT);
 
-  // Hardware reset
   digitalWrite(TFT_RST, HIGH);
   delay(10);
   digitalWrite(TFT_RST, LOW);
@@ -162,11 +187,10 @@ static void tftInit() {
   SPI.begin();
   SPI.beginTransaction(SPISettings(24000000, MSBFIRST, SPI_MODE0));
 
-  // GC9A01 init sequence
-  tftCmd(0xEF);                          // Inter register enable 2
+  tftCmd(0xEF);
   { uint8_t d[] = {0x14}; tftWriteCmd(0xEB, d, 1); }
-  tftCmd(0xFE);                          // Inter register enable 1
-  tftCmd(0xEF);                          // Inter register enable 2
+  tftCmd(0xFE);
+  tftCmd(0xEF);
 
   { uint8_t d[] = {0x14}; tftWriteCmd(0xEB, d, 1); }
   { uint8_t d[] = {0x14}; tftWriteCmd(0x84, d, 1); }
@@ -182,25 +206,23 @@ static void tftInit() {
   { uint8_t d[] = {0xFF}; tftWriteCmd(0x8E, d, 1); }
   { uint8_t d[] = {0xFF}; tftWriteCmd(0x8F, d, 1); }
 
-  { uint8_t d[] = {0x00, 0x20}; tftWriteCmd(0xB6, d, 2); }  // Display function control
-
-  { uint8_t d[] = {0x08}; tftWriteCmd(GC9A01_MADCTL, d, 1); }  // Mem access ctrl: BGR
-  { uint8_t d[] = {0x05}; tftWriteCmd(GC9A01_COLMOD, d, 1); }  // 16-bit RGB565
+  { uint8_t d[] = {0x00, 0x20}; tftWriteCmd(0xB6, d, 2); }
+  { uint8_t d[] = {0x08}; tftWriteCmd(GC9A01_MADCTL, d, 1); }
+  { uint8_t d[] = {0x05}; tftWriteCmd(GC9A01_COLMOD, d, 1); }
 
   { uint8_t d[] = {0x08, 0x08, 0x08, 0x08}; tftWriteCmd(0x90, d, 4); }
   { uint8_t d[] = {0x06}; tftWriteCmd(0xBD, d, 1); }
   { uint8_t d[] = {0x00}; tftWriteCmd(0xBC, d, 1); }
   { uint8_t d[] = {0x60, 0x01, 0x04}; tftWriteCmd(0xFF, d, 3); }
 
-  { uint8_t d[] = {0x13}; tftWriteCmd(0xC3, d, 1); }  // Power control 2
-  { uint8_t d[] = {0x13}; tftWriteCmd(0xC4, d, 1); }  // Power control 3
-  { uint8_t d[] = {0x22}; tftWriteCmd(0xC9, d, 1); }  // Power control 4
+  { uint8_t d[] = {0x13}; tftWriteCmd(0xC3, d, 1); }
+  { uint8_t d[] = {0x13}; tftWriteCmd(0xC4, d, 1); }
+  { uint8_t d[] = {0x22}; tftWriteCmd(0xC9, d, 1); }
 
   { uint8_t d[] = {0x11}; tftWriteCmd(0xBE, d, 1); }
   { uint8_t d[] = {0x10, 0x0E}; tftWriteCmd(0xE1, d, 2); }
   { uint8_t d[] = {0x21, 0x0C}; tftWriteCmd(0xDF, d, 2); }
 
-  // Gamma
   { uint8_t d[] = {0x45, 0x09, 0x08, 0x08, 0x26, 0x2A};
     tftWriteCmd(0xF0, d, 6); }
   { uint8_t d[] = {0x43, 0x70, 0x72, 0x36, 0x37, 0x6F};
@@ -214,10 +236,8 @@ static void tftInit() {
   { uint8_t d[] = {0x77}; tftWriteCmd(0xAE, d, 1); }
   { uint8_t d[] = {0x63}; tftWriteCmd(0xCD, d, 1); }
 
-  // More vendor registers
   { uint8_t d[] = {0x07, 0x07, 0x04, 0x0E, 0x0F, 0x09, 0x07, 0x08, 0x03};
     tftWriteCmd(0x70, d, 9); }
-
   { uint8_t d[] = {0x34}; tftWriteCmd(0xE8, d, 1); }
   { uint8_t d[] = {0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00,
@@ -243,13 +263,12 @@ static void tftInit() {
   { uint8_t d[] = {0x72, 0x06}; tftWriteCmd(0x74, d, 2); }
   { uint8_t d[] = {0x80}; tftWriteCmd(0x35, d, 1); }
 
-  { uint8_t d[] = {0x01}; tftWriteCmd(0x21, d, 0); }  // Inversion ON (cmd only)
   tftCmd(0x21);
 
-  tftCmd(GC9A01_SLPOUT);  // Sleep out
+  tftCmd(GC9A01_SLPOUT);
   delay(120);
 
-  { uint8_t d[] = {0x04}; tftWriteCmd(GC9A01_DISPON, d, 1); }  // Display ON
+  { uint8_t d[] = {0x04}; tftWriteCmd(GC9A01_DISPON, d, 1); }
   delay(20);
 }
 
@@ -259,9 +278,8 @@ static void tftInit() {
 
 static bool ahtInit() {
   Wire.begin();
-  delay(40);  // AHT20 needs 20ms+ after power on
+  delay(40);
 
-  // Check status
   Wire.beginTransmission(AHT20_ADDR);
   Wire.write(0x71);
   if (Wire.endTransmission() != 0) return false;
@@ -270,7 +288,6 @@ static bool ahtInit() {
   if (!Wire.available()) return false;
   uint8_t status = Wire.read();
 
-  // If not calibrated, initialize
   if (!(status & 0x08)) {
     Wire.beginTransmission(AHT20_ADDR);
     Wire.write(0xBE);
@@ -297,10 +314,9 @@ static bool ahtMeasure(float &temp, float &hum) {
   uint8_t d[7];
   for (int i = 0; i < 7; i++) d[i] = Wire.read();
 
-  // Check busy bit
   if (d[0] & 0x80) return false;
 
-  uint32_t rawHum = ((uint32_t)d[1] << 12) | ((uint32_t)d[2] << 4) | (d[3] >> 4);
+  uint32_t rawHum  = ((uint32_t)d[1] << 12) | ((uint32_t)d[2] << 4) | (d[3] >> 4);
   uint32_t rawTemp = (((uint32_t)d[3] & 0x0F) << 16) | ((uint32_t)d[4] << 8) | d[5];
 
   hum  = (float)rawHum  / 1048576.0f * 100.0f;
@@ -324,15 +340,12 @@ static void drawScaledEmoji() {
 static void drawIdleFace() {
   tftFillScreen(0x0000);
 
-  // Left eye
   tftFillCircle(85, 105, 30, 0xFFFF);
   tftFillCircle(90, 100, 12, 0x0000);
 
-  // Right eye
   tftFillCircle(155, 105, 30, 0xFFFF);
   tftFillCircle(160, 100, 12, 0x0000);
 
-  // Smile arc
   for (int i = -25; i <= 25; i++) {
     int x = 120 + i;
     int y = 155 + (i * i) / 50;
@@ -370,20 +383,36 @@ void setup() {
   Bridge.provide("clear_emoji", handleClearEmoji);
 
   pinMode(BTN_PIN, INPUT_PULLUP);
+  analogReadResolution(12);   // 12-bit ADC: 0–4095, DC centre ~2048
 
   tftInit();
   drawIdleFace();
 
   ahtReady = ahtInit();
-  if (!ahtReady) {
-    Monitor.println("ERR:AHT20_NOT_FOUND");
-  }
+  if (!ahtReady) Monitor.println("ERR:AHT20_NOT_FOUND");
 
+  nextSampleUs = micros();
   Monitor.println("READY");
 }
 
 void loop() {
-  // Handle emoji display updates
+  // ---- Audio sampling at 8 kHz ----
+  uint32_t now = micros();
+  if ((int32_t)(now - nextSampleUs) >= 0) {
+    nextSampleUs += US_PER_SAMPLE;
+
+    int16_t s    = voiceFilter(analogRead(A0));
+    audioBuf[audioBufIdx++] = (int8_t)(s >> 8);
+
+    if (audioBufIdx >= AUDIO_BUFSIZE) {
+      audioBufIdx = 0;
+      MsgPack::arr_t<int8_t> pkt;
+      for (int i = 0; i < AUDIO_BUFSIZE; i++) pkt.push_back(audioBuf[i]);
+      Bridge.notify("audio", pkt);
+    }
+  }
+
+  // ---- Emoji display updates ----
   if (emojiReady) {
     emojiReady = false;
     drawScaledEmoji();
@@ -393,27 +422,18 @@ void loop() {
     drawIdleFace();
   }
 
-  // Button (debounced)
+  // ---- Button (debounced) ----
   bool btnState = (digitalRead(BTN_PIN) == LOW);
-  unsigned long now = millis();
+  unsigned long nowMs = millis();
 
-  if (btnState != lastBtnState && (now - lastDebounce) > DEBOUNCE_MS) {
-    lastDebounce = now;
+  if (btnState != lastBtnState && (nowMs - lastDebounce) > DEBOUNCE_MS) {
+    lastDebounce = nowMs;
     lastBtnState = btnState;
-
-    if (btnState && !micActive) {
-      micActive = true;
-      Monitor.println("MIC:START");
-    } else if (!btnState && micActive) {
-      micActive = false;
-      Monitor.println("MIC:STOP");
-    }
   }
 
-  // Periodic sensor readings
-  if (ahtReady && (now - lastSensorTime >= SENSOR_INTERVAL_MS)) {
-    lastSensorTime = now;
-
+  // ---- Periodic AHT20 sensor readings ----
+  if (ahtReady && (nowMs - lastSensorTime >= SENSOR_INTERVAL_MS)) {
+    lastSensorTime = nowMs;
     float temp, hum;
     if (ahtMeasure(temp, hum)) {
       Monitor.print("TEMP:");

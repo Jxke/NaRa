@@ -1,12 +1,20 @@
 """
-main.py — Main event loop for the ambient AI assistant.
+main.py — Ambient AI assistant main loop.
 
-Polls the Arduino serial monitor for sensor data and mic control signals.
-On button press: records audio, transcribes, runs LLM, sends emoji to display.
-Continuously stores sensor snapshots and runs context summarization.
+Audio pipeline:
+  MCU (analog mic → Bridge.notify("audio"))
+    → bridge_shim (arduino app, TCP :7000)
+    → ArduinoClient (this process)
+    → VADBatcher (VAD-gated speech segmentation)
+    → Whisper STT
+    → Local LLM
+    → emoji sent back to MCU display
+
+Sensor data from Bridge serial monitor is still read via mon/read RPC.
 """
 
 import json
+import logging
 import time
 
 import config
@@ -16,10 +24,15 @@ import llm
 import bridge
 import context
 import emoji_map
+from arduino_client import ArduinoClient
+from vad_batcher import VADBatcher
+
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(message)s")
 
 
 def handle_query(transcription, sensor_data):
-    """Process user speech through the full pipeline → emoji on display."""
+    """Run full pipeline: transcription → LLM → emoji on display."""
     print(f'[QUERY] "{transcription}"')
 
     t0 = time.time()
@@ -30,22 +43,18 @@ def handle_query(transcription, sensor_data):
     response = llm.chat(messages)
     t_llm = time.time() - t0
 
-    # Extract the first word from LLM response
-    word = response.split()[0] if response.split() else "unknown"
+    word  = response.split()[0] if response.split() else "unknown"
     emoji = emoji_map.word_to_emoji(word)
 
     print(f"[LLM] {response!r} → word={word!r} → emoji={emoji}")
     print(f"[TIMING] context={t_ctx:.2f}s  llm={t_llm:.1f}s")
 
-    # Send emoji to Arduino display
     bridge.send_emoji(emoji)
 
-    # Store in DB
     snapshot_id = db.get_latest_snapshot_id()
     if snapshot_id:
         db.update_snapshot_response(snapshot_id, f"{word} {emoji}")
 
-    # Clear emoji after timeout
     time.sleep(config.EMOJI_DISPLAY_S)
     bridge.clear_emoji()
 
@@ -54,74 +63,70 @@ def handle_query(transcription, sensor_data):
 
 def main():
     print("=" * 50)
-    print("  Ambient AI Assistant")
+    print("  Ambient AI Assistant (MCU mic pipeline)")
     print("=" * 50)
 
     db.init_db()
     print("[INIT] Database ready.")
 
+    # Serial monitor for sensor data
     reader = bridge.SerialReader()
     print("[INIT] Serial reader ready.")
 
-    # Track sensor state
+    # VAD audio pipeline
+    vad = VADBatcher()
+
+    def on_audio(topic, data):
+        if topic == "audio":
+            vad.feed(data.get("samples", []))
+
+    arduino = ArduinoClient(
+        on_message=on_audio,
+    )
+    arduino.start()
+    print(f"[INIT] ArduinoClient connecting to {config.BRIDGE_HOST}:{config.BRIDGE_PORT}...")
+
     current_sensors = {}
     last_snapshot_time = 0
-    recording_proc = None
 
-    print("[READY] Listening for Arduino serial data...\n")
+    print("[READY] Listening for speech...\n")
 
     try:
         while True:
-            lines = reader.read_lines()
-
-            for line in lines:
-                # Parse sensor data
+            # Read sensor data from serial monitor
+            for line in reader.read_lines():
                 parsed = bridge.parse_sensor_line(line)
                 if parsed:
                     key, value = parsed
                     current_sensors[key] = value
-                    continue
 
-                # Mic control signals
-                if line == "MIC:START":
-                    print("[MIC] Button pressed — recording...")
-                    recording_proc = stt.start_recording()
-                    continue
+            # Check for completed speech segment
+            segment = vad.get_segment()
+            if segment:
+                normalized_wav, _ = segment
+                print("[MIC] Speech detected — transcribing...")
 
-                if line == "MIC:STOP" and recording_proc:
-                    print("[MIC] Button released — processing...")
+                transcription = stt.transcribe_wav(normalized_wav)
 
-                    # Store a snapshot with the current sensor data + transcription
-                    transcription = stt.stop_and_transcribe(recording_proc)
-                    recording_proc = None
+                sensor_json = json.dumps(current_sensors) if current_sensors else None
+                db.insert_snapshot(sensor_json, transcription or None)
 
-                    sensor_json = json.dumps(current_sensors) if current_sensors else None
-                    db.insert_snapshot(sensor_json, transcription or None)
+                if transcription:
+                    handle_query(transcription, current_sensors)
+                else:
+                    print("[MIC] No speech recognised.")
 
-                    if transcription:
-                        handle_query(transcription, current_sensors)
-                    else:
-                        print("[MIC] No speech detected.")
-                    continue
-
-            # Periodically store sensor snapshots (even without speech)
+            # Periodic sensor snapshots
             now = time.time()
             if current_sensors and (now - last_snapshot_time) >= config.SENSOR_SNAPSHOT_INTERVAL_S:
-                sensor_json = json.dumps(current_sensors)
-                db.insert_snapshot(sensor_json, None)
+                db.insert_snapshot(json.dumps(current_sensors), None)
                 last_snapshot_time = now
-
-                # Run summarization after storing
                 context.run_summarization()
 
-            # Poll interval
             time.sleep(config.SERIAL_POLL_INTERVAL_S)
 
     except KeyboardInterrupt:
         print("\n[EXIT] Shutting down.")
-        if recording_proc:
-            recording_proc.terminate()
-            recording_proc.wait()
 
 
 if __name__ == "__main__":

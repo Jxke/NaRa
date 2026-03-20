@@ -82,3 +82,22 @@ def stop_and_transcribe(proc):
     segments, _ = model.transcribe(io.BytesIO(wav), language="en", beam_size=5)
     text = " ".join(s.text for s in segments).strip()
     return text
+
+
+def transcribe_wav(wav_bytes: bytes) -> str:
+    """Transcribe WAV bytes directly (used by MCU audio pipeline).
+
+    Args:
+        wav_bytes: WAV-formatted audio bytes (PCM_16, 8 kHz, mono).
+
+    Returns:
+        Transcribed text string, or empty string if nothing detected.
+    """
+    import io
+    if len(wav_bytes) < 1000:
+        return ""
+    model = _get_model()
+    print("[STT] Transcribing from VAD segment...")
+    segments, _ = model.transcribe(io.BytesIO(wav_bytes), language="en", beam_size=5)
+    text = " ".join(s.text for s in segments).strip()
+    return text
