@@ -1,8 +1,8 @@
 /*
  * Ambient AI Assistant — MCU Firmware
  *
- * Audio transport: Monitor.write() binary frames to Linux via serial proxy.
- * Frame format: SYNC(0x01 0x80) + 128 bytes int8 PCM @ 8 kHz
+ * Audio transport: Bridge.notify("audio", int8[128]) → bridge_shim → VADBatcher
+ * Frame: 128 signed 8-bit PCM samples @ 8 kHz
  *
  * Sensor output (ASCII on same Monitor):
  *   TEMP:xx.x\r\n   HUM:xx.x\r\n   READY\r\n   MIC:START\r\n   MIC:STOP\r\n
@@ -24,7 +24,7 @@
 #define BTN_PIN   2
 
 #define GC9A01_SLPOUT  0x11
-#define GC9A01_DISPON  0x26
+#define GC9A01_DISPON  0x29
 #define GC9A01_CASET   0x2A
 #define GC9A01_RASET   0x2B
 #define GC9A01_RAMWR   0x2C
@@ -35,13 +35,16 @@
 #define DISP_SIZE 240
 
 // RGB565 color helpers
-#define RGB565(r,g,b) ((uint16_t)(((r>>3)<<11)|((g>>2)<<5)|(b>>3)))
-#define COLOR_BLACK   0x0000
-#define COLOR_WHITE   0xFFFF
-#define COLOR_GREEN   RGB565(0,200,0)
-#define COLOR_RED     RGB565(220,30,30)
-#define COLOR_YELLOW  RGB565(240,220,0)
-#define COLOR_BLUE    RGB565(0,100,255)
+// Display initialised with INVON (0x21): stored bits are inverted before display.
+// To show colour C, store ~C. INVRGB pre-inverts so macros produce correct screen colours.
+#define RGB565(r,g,b)  ((uint16_t)(((r>>3)<<11)|((g>>2)<<5)|(b>>3)))
+#define INVRGB(r,g,b)  ((uint16_t)(~RGB565(r,g,b)))
+#define COLOR_BLACK   0xFFFF        // store 0xFFFF → display black
+#define COLOR_WHITE   0x0000        // store 0x0000 → display white
+#define COLOR_GREEN   INVRGB(0,200,0)
+#define COLOR_RED     INVRGB(220,30,30)
+#define COLOR_YELLOW  INVRGB(240,220,0)
+#define COLOR_BLUE    INVRGB(0,100,255)
 
 static bool lastBtnState = false;
 static unsigned long lastDebounce = 0;
@@ -51,12 +54,10 @@ static unsigned long lastSensorTime = 0;
 static const unsigned long SENSOR_INTERVAL_MS = 2000;
 static bool ahtReady = false;
 
-// ---- Audio: Monitor.write() binary frames ----
+// ---- Audio: Bridge.notify("audio", int8[128]) ----
 #define SAMPLE_RATE    8000
 #define AUDIO_BUFSIZE  128
 #define US_PER_SAMPLE  (1000000UL / SAMPLE_RATE)
-#define FRAME_SYNC0  0x01
-#define FRAME_SYNC1  0x80
 
 static float   dcEst    = 2048.0f;
 static float   smoothed = 0.0f;
@@ -108,21 +109,26 @@ static void tftSetAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
   tftCmd(GC9A01_RASET); tftData16(y0); tftData16(y1);
   tftCmd(GC9A01_RAMWR);
 }
+static const SPISettings kTftSPI(24000000, MSBFIRST, SPI_MODE0);
 static void tftFillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
   if (x >= DISP_SIZE || y >= DISP_SIZE) return;
   if (x + w > DISP_SIZE) w = DISP_SIZE - x;
   if (y + h > DISP_SIZE) h = DISP_SIZE - y;
+  SPI.beginTransaction(kTftSPI);
   tftSetAddrWindow(x, y, x+w-1, y+h-1);
   uint8_t hi = color >> 8, lo = color & 0xFF;
   uint32_t n = (uint32_t)w * h;
   digitalWrite(TFT_DC, HIGH); digitalWrite(TFT_CS, LOW);
   for (uint32_t i = 0; i < n; i++) { SPI.transfer(hi); SPI.transfer(lo); }
   digitalWrite(TFT_CS, HIGH);
+  SPI.endTransaction();
 }
 static void tftFillScreen(uint16_t c) { tftFillRect(0, 0, DISP_SIZE, DISP_SIZE, c); }
 static void tftDrawPixel(uint16_t x, uint16_t y, uint16_t color) {
   if (x >= DISP_SIZE || y >= DISP_SIZE) return;
+  SPI.beginTransaction(kTftSPI);
   tftSetAddrWindow(x, y, x, y); tftData16(color);
+  SPI.endTransaction();
 }
 static void tftFillCircle(int16_t cx, int16_t cy, int16_t r, uint16_t color) {
   for (int16_t dy = -r; dy <= r; dy++) {
@@ -141,7 +147,7 @@ static void tftInit() {
   digitalWrite(TFT_RST, HIGH); delay(10); digitalWrite(TFT_RST, LOW); delay(10);
   digitalWrite(TFT_RST, HIGH); delay(120);
   SPI.begin();
-  SPI.beginTransaction(SPISettings(24000000, MSBFIRST, SPI_MODE0));
+  SPI.beginTransaction(kTftSPI);
   tftCmd(0xEF);
   { uint8_t d[]={0x14}; tftWriteCmd(0xEB,d,1); }
   tftCmd(0xFE); tftCmd(0xEF);
@@ -189,8 +195,9 @@ static void tftInit() {
   { uint8_t d[]={0x80}; tftWriteCmd(0x35,d,1); }
   tftCmd(0x21);
   tftCmd(GC9A01_SLPOUT); delay(120);
-  { uint8_t d[]={0x04}; tftWriteCmd(GC9A01_DISPON,d,1); }
+  tftCmd(GC9A01_DISPON);
   delay(20);
+  SPI.endTransaction();
 }
 
 // ================================================================
@@ -337,7 +344,7 @@ void setup() {
 }
 
 void loop() {
-  // ---- Audio at 8 kHz via Monitor.write() binary frames ----
+  // ---- Audio at 8 kHz via Bridge.notify("audio") ----
   uint32_t now = micros();
   if ((int32_t)(now - nextSampleUs) >= 0) {
     nextSampleUs += US_PER_SAMPLE;
@@ -346,9 +353,9 @@ void loop() {
 
     if (audioBufIdx >= AUDIO_BUFSIZE) {
       audioBufIdx = 0;
-      uint8_t hdr[2] = { FRAME_SYNC0, FRAME_SYNC1 };
-      Monitor.write(hdr, 2);
-      Monitor.write((uint8_t*)audioBuf, AUDIO_BUFSIZE);
+      MsgPack::arr_t<int8_t> pkt;
+      for (int i = 0; i < AUDIO_BUFSIZE; i++) pkt.push_back(audioBuf[i]);
+      Bridge.notify("audio", pkt);
     }
   }
 
