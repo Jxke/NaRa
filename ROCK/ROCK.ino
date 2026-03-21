@@ -60,16 +60,29 @@ bool btnRawState = false;
 unsigned long lastBtnEdgeMs = 0;
 const unsigned long BTN_DEBOUNCE_MS = 35;
 
-// --- MCU analog mic (A0) stream to Debian via Bridge.notify("audio", int8[128]) ---
-#define SAMPLE_RATE    8000
-#define AUDIO_BUFSIZE  128
-#define US_PER_SAMPLE  (1000000UL / SAMPLE_RATE)
+// --- MCU analog mic (A0) stream to Debian via monitor binary frames ---
+// Capture at 16 kHz, low-pass filter, then decimate to 8 kHz to reduce aliasing.
+#define RAW_SAMPLE_RATE   16000
+#define SAMPLE_RATE       8000
+#define DECIM_FACTOR      (RAW_SAMPLE_RATE / SAMPLE_RATE)
+#define AUDIO_BUFSIZE     128
+#define US_PER_RAW_SAMPLE (1000000UL / RAW_SAMPLE_RATE)
+#define MAX_RAW_PER_SLICE 64
 
-float    dcEst       = 2048.0f;
-float    smoothed    = 0.0f;
+static_assert((RAW_SAMPLE_RATE % SAMPLE_RATE) == 0,
+              "RAW_SAMPLE_RATE must be an integer multiple of SAMPLE_RATE");
+
+float    dcEst          = 2048.0f;
+float    smoothed       = 0.0f;
 int8_t   audioBuf[AUDIO_BUFSIZE];
-int      audioBufIdx = 0;
-uint32_t nextSampleUs = 0;
+int      audioBufIdx    = 0;
+uint32_t nextRawSampleUs = 0;
+
+// 4-sample moving-average filter state for anti-aliasing before decimation.
+int16_t aaHist[4] = {2048, 2048, 2048, 2048};
+int32_t aaSum = 2048 * 4;
+uint8_t aaIdx = 0;
+uint8_t decimPhase = 0;
 
 // --- Linux -> MCU monitor command parser (EMOJI:H/S/N, CLEAR) ---
 #define MON_CMD_SIZE 32
@@ -115,26 +128,25 @@ void drawEyeFB(int16_t cx, int16_t cy, int16_t px, int16_t py) {
   display.drawRGBBitmap(cx - EYE_R, cy - EYE_R, eyeBuf, DIAM, DIAM);
 }
 
-static int16_t voiceFilter(int raw) {
-  // Lightweight speech-focused shaping: high-pass (DC removal), light gate,
-  // and mild smoothing to preserve consonants for Whisper.
-  dcEst    = 0.997f * dcEst + 0.003f * (float)raw;
-  float c  = (float)raw - dcEst;
-  if (fabsf(c) < 2.0f) c = 0.0f;
-  smoothed = 0.25f * smoothed + 0.75f * c;
-  float s  = smoothed * 24.0f;
+static int16_t voiceFilter(float raw) {
+  // Speech shaping after anti-alias filtering: DC removal + light smoothing.
+  dcEst    = 0.999f * dcEst + 0.001f * raw;
+  float c  = raw - dcEst;
+  if (fabsf(c) < 3.0f) c = 0.0f;
+  smoothed = 0.20f * smoothed + 0.80f * c;
+  float s  = smoothed * 34.0f;
   if (s >  32767.0f) s =  32767.0f;
   if (s < -32768.0f) s = -32768.0f;
   return (int16_t)s;
 }
 
 static void sendAudioPacket() {
-  MsgPack::arr_t<int8_t> pkt;
-  pkt.reserve(AUDIO_BUFSIZE);
+  // Monitor binary frame: 0x01 0x80 + 128 signed int8 samples.
+  Monitor.write((uint8_t)0x01);
+  Monitor.write((uint8_t)0x80);
   for (int i = 0; i < AUDIO_BUFSIZE; i++) {
-    pkt.push_back(audioBuf[i]);
+    Monitor.write((uint8_t)audioBuf[i]);
   }
-  Bridge.notify("audio", pkt);
 }
 
 static void startMicCapture() {
@@ -142,7 +154,16 @@ static void startMicCapture() {
   audioBufIdx = 0;
   dcEst = 2048.0f;
   smoothed = 0.0f;
-  nextSampleUs = micros();
+
+  int seed = analogRead(A0);
+  for (int i = 0; i < 4; i++) {
+    aaHist[i] = (int16_t)seed;
+  }
+  aaSum = (int32_t)seed * 4;
+  aaIdx = 0;
+  decimPhase = 0;
+
+  nextRawSampleUs = micros();
   Monitor.println("MIC:START");
 }
 
@@ -162,18 +183,43 @@ static void sampleMicWhilePressed() {
   if (!micActive) return;
 
   uint32_t nowUs = micros();
-  while ((int32_t)(nowUs - nextSampleUs) >= 0) {
-    nextSampleUs += US_PER_SAMPLE;
+  int rawProcessed = 0;
 
-    int16_t filtered = voiceFilter(analogRead(A0));
-    int16_t q = (filtered >> 6);
-    if (q > 127) q = 127;
-    else if (q < -128) q = -128;
-    audioBuf[audioBufIdx++] = (int8_t)q;
+  while ((int32_t)(nowUs - nextRawSampleUs) >= 0) {
+    nextRawSampleUs += US_PER_RAW_SAMPLE;
 
-    if (audioBufIdx >= AUDIO_BUFSIZE) {
-      sendAudioPacket();
-      audioBufIdx = 0;
+    int raw = analogRead(A0);
+
+    aaSum -= aaHist[aaIdx];
+    aaHist[aaIdx] = (int16_t)raw;
+    aaSum += aaHist[aaIdx];
+    aaIdx = (aaIdx + 1) & 0x03;
+
+    decimPhase++;
+    if (decimPhase >= DECIM_FACTOR) {
+      decimPhase = 0;
+
+      float aa = (float)aaSum * 0.25f;
+      int16_t filtered = voiceFilter(aa);
+      int16_t q = (filtered >> 6);
+      if (q > 127) q = 127;
+      else if (q < -128) q = -128;
+      audioBuf[audioBufIdx++] = (int8_t)q;
+
+      if (audioBufIdx >= AUDIO_BUFSIZE) {
+        sendAudioPacket();
+        audioBufIdx = 0;
+        k_yield();
+      }
+    }
+
+    rawProcessed++;
+    if (rawProcessed >= MAX_RAW_PER_SLICE) {
+      // If transport lags, drop backlog instead of monopolizing loop.
+      if ((int32_t)(micros() - nextRawSampleUs) > 0) {
+        nextRawSampleUs = micros();
+      }
+      break;
     }
 
     nowUs = micros();

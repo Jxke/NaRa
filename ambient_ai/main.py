@@ -2,7 +2,7 @@
 main.py -- Ambient AI assistant main loop.
 
 Button-gated audio pipeline:
-  D2 press  -> MCU sends MIC:START and begins Bridge.notify("audio", int8[128])
+  D2 press  -> MCU sends MIC:START and streams monitor binary audio frames (int8[128])
   D2 release-> MCU sends MIC:STOP, Linux transcribes captured samples with Whisper,
                runs local LLM, maps to emoji, displays for EMOJI_DISPLAY_S seconds.
 """
@@ -22,7 +22,7 @@ import db
 import emoji_map
 import llm
 import stt
-from arduino_client import ArduinoClient
+from monitor_audio_client import MonitorAudioClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -132,12 +132,8 @@ def main():
     max_samples = int(config.MAX_RECORD_S * config.MCU_SAMPLE_RATE)
     min_samples = int(config.MIN_BUTTON_RECORD_S * config.MCU_SAMPLE_RATE)
 
-    def on_audio(topic, data):
+    def on_audio(samples):
         nonlocal recording, recording_samples
-        if topic != "audio":
-            return
-
-        samples = data.get("samples", [])
         if not samples:
             return
 
@@ -152,9 +148,9 @@ def main():
             else:
                 recording_samples.extend(samples[:remaining])
 
-    arduino = ArduinoClient(on_message=on_audio)
-    arduino.start()
-    print(f"[INIT] ArduinoClient connecting to {config.BRIDGE_HOST}:{config.BRIDGE_PORT}...")
+    mon_audio = MonitorAudioClient(on_audio=on_audio)
+    mon_audio.start()
+    print(f"[INIT] MonitorAudioClient connecting to {config.MONITOR_HOST}:{config.MONITOR_PORT}...")
 
     current_sensors = {}
     last_snapshot_time = 0.0

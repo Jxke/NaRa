@@ -47,6 +47,10 @@ LLM_SUMMARIZE_MAX_TOKENS = 256  # more tokens for summaries
 ROUTER_SOCKET_PATH = "/var/run/arduino-router.sock"
 SERIAL_POLL_INTERVAL_S = 0.05  # 50ms poll rate for mon/read
 
+# --- Monitor TCP stream (serial monitor proxy) ---
+MONITOR_HOST = "127.0.0.1"
+MONITOR_PORT = 7500
+
 # --- Emoji ---
 EMOJI_SIZE = 40  # 40x40 px display
 EMOJI_DISPLAY_S = 10  # seconds to show emoji before clearing
