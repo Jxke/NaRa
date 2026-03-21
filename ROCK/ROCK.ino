@@ -74,6 +74,7 @@ static_assert((RAW_SAMPLE_RATE % SAMPLE_RATE) == 0,
 
 float    dcEst          = 2048.0f;
 float    smoothed       = 0.0f;
+float    agcEnv         = 12.0f;
 int8_t   audioBuf[AUDIO_BUFSIZE];
 int      audioBufIdx    = 0;
 uint32_t nextRawSampleUs = 0;
@@ -130,12 +131,19 @@ void drawEyeFB(int16_t cx, int16_t cy, int16_t px, int16_t py) {
 }
 
 static int16_t voiceFilter(float raw) {
-  // Speech shaping after anti-alias filtering: DC removal + light smoothing.
-  dcEst    = 0.999f * dcEst + 0.001f * raw;
+  // Preserve low-energy speech (including deeper voices) while limiting hiss.
+  dcEst    = 0.9995f * dcEst + 0.0005f * raw;
   float c  = raw - dcEst;
-  if (fabsf(c) < 3.0f) c = 0.0f;
-  smoothed = 0.20f * smoothed + 0.80f * c;
-  float s  = smoothed * 34.0f;
+  if (fabsf(c) < 1.0f) c = 0.0f;
+  smoothed = 0.35f * smoothed + 0.65f * c;
+
+  float absLevel = fabsf(smoothed);
+  agcEnv = 0.995f * agcEnv + 0.005f * absLevel;
+  float agc = 18.0f / (agcEnv + 6.0f);
+  if (agc < 0.9f) agc = 0.9f;
+  if (agc > 2.2f) agc = 2.2f;
+
+  float s  = smoothed * (30.0f * agc);
   if (s >  32767.0f) s =  32767.0f;
   if (s < -32768.0f) s = -32768.0f;
   return (int16_t)s;
@@ -154,6 +162,7 @@ static void startMicCapture() {
   audioBufIdx = 0;
   dcEst = 2048.0f;
   smoothed = 0.0f;
+  agcEnv = 12.0f;
 
   int seed = analogRead(A0);
   for (int i = 0; i < 4; i++) {

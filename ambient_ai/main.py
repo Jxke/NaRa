@@ -48,9 +48,9 @@ def _samples_to_wav(samples, sample_rate):
     p95 = abs_vals[int(0.95 * (len(abs_vals) - 1))] if abs_vals else 0
 
     if is_int8:
-        target_p95 = 90.0
-        gain = min(16.0, (target_p95 / p95)) if p95 > 0 else 1.0
-        gate = 2
+        target_p95 = 110.0
+        gain = min(20.0, (target_p95 / p95)) if p95 > 0 else 1.0
+        gate = 1
     else:
         target_p95 = 24000.0
         gain = min(8.0, (target_p95 / p95)) if p95 > 0 else 1.0
