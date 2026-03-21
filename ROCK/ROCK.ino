@@ -120,7 +120,7 @@ static int16_t voiceFilter(int raw) {
   float c  = (float)raw - dcEst;
   if (fabsf(c) < 12.0f) c = 0.0f;
   smoothed = 0.65f * smoothed + 0.35f * c;
-  float s  = smoothed * 10.0f;
+  float s  = smoothed * 48.0f;
   if (s >  32767.0f) s =  32767.0f;
   if (s < -32768.0f) s = -32768.0f;
   return (int16_t)s;
@@ -184,13 +184,14 @@ static void handleButton() {
     lastBtnEdgeMs = nowMs;
   }
 
-  if ((nowMs - lastBtnEdgeMs) >= BTN_DEBOUNCE_MS && btnStablePressed != btnRawState) {
+  if ((nowMs - lastBtnEdgeMs) >= BTN_DEBOUNCE_MS) {
     btnStablePressed = btnRawState;
-    if (btnStablePressed) {
-      startMicCapture();
-    } else {
-      stopMicCapture();
-    }
+  }
+
+  if (btnStablePressed && !micActive) {
+    startMicCapture();
+  } else if (!btnStablePressed && micActive) {
+    stopMicCapture();
   }
 }
 
@@ -339,8 +340,8 @@ void loop() {
   }
 
   int16_t iPx, iPy;
-  if (hasEmoji || micActive) {
-    // Freeze pupils while emoji is shown or while recording button is held.
+  if (hasEmoji) {
+    // Freeze pupils only while emoji is shown.
     fx = fy = 0.0f;
     iPx = iPy = 0;
   } else {
