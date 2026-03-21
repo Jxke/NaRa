@@ -1,0 +1,15 @@
+{
+  "sample_rate": 8000,
+  "samples": 35712,
+  "duration_s": 4.464,
+  "capture_window_s": 4.556835651397705,
+  "mean": -0.4903393817204301,
+  "abs_mean": 8.480538754480287,
+  "rms": 12.02006129428351,
+  "peak": 77,
+  "p90": 20,
+  "p99": 39,
+  "normalization_gain": 1.2337662337662338,
+  "raw_wav": "/home/arduino/ROCK/ambient_ai/diagnostics/button_capture_20260321_040517_raw.wav",
+  "normalized_wav": "/home/arduino/ROCK/ambient_ai/diagnostics/button_capture_20260321_040517_norm.wav"
+}
