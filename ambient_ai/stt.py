@@ -79,7 +79,15 @@ def stop_and_transcribe(proc):
     wav = _build_wav(raw_audio)
     model = _get_model()
     print("[STT] Transcribing...")
-    segments, _ = model.transcribe(io.BytesIO(wav), language="en", beam_size=5)
+    segments, _ = model.transcribe(
+        io.BytesIO(wav),
+        language="en",
+        beam_size=1,
+        vad_filter=False,
+        condition_on_previous_text=False,
+        no_speech_threshold=1.0,
+        temperature=0.6,
+    )
     text = " ".join(s.text for s in segments).strip()
     return text
 
@@ -96,8 +104,32 @@ def transcribe_wav(wav_bytes: bytes) -> str:
     import io
     if len(wav_bytes) < 1000:
         return ""
+
     model = _get_model()
     print("[STT] Transcribing from VAD segment...")
-    segments, _ = model.transcribe(io.BytesIO(wav_bytes), language="en", beam_size=5)
+
+    # Pass 1: force English and disable no-speech suppression.
+    segments, _ = model.transcribe(
+        io.BytesIO(wav_bytes),
+        language="en",
+        beam_size=1,
+        vad_filter=False,
+        condition_on_previous_text=False,
+        no_speech_threshold=1.0,
+        temperature=0.6,
+    )
+    text = " ".join(s.text for s in segments).strip()
+    if text:
+        return text
+
+    # Pass 2 fallback: auto language in case language forcing rejects weak speech.
+    segments, _ = model.transcribe(
+        io.BytesIO(wav_bytes),
+        beam_size=1,
+        vad_filter=False,
+        condition_on_previous_text=False,
+        no_speech_threshold=1.0,
+        temperature=0.6,
+    )
     text = " ".join(s.text for s in segments).strip()
     return text

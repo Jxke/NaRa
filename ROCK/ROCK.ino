@@ -116,11 +116,13 @@ void drawEyeFB(int16_t cx, int16_t cy, int16_t px, int16_t py) {
 }
 
 static int16_t voiceFilter(int raw) {
-  dcEst    = 0.995f * dcEst + 0.005f * (float)raw;
+  // Lightweight speech-focused shaping: high-pass (DC removal), light gate,
+  // and mild smoothing to preserve consonants for Whisper.
+  dcEst    = 0.997f * dcEst + 0.003f * (float)raw;
   float c  = (float)raw - dcEst;
-  if (fabsf(c) < 12.0f) c = 0.0f;
-  smoothed = 0.65f * smoothed + 0.35f * c;
-  float s  = smoothed * 48.0f;
+  if (fabsf(c) < 2.0f) c = 0.0f;
+  smoothed = 0.25f * smoothed + 0.75f * c;
+  float s  = smoothed * 24.0f;
   if (s >  32767.0f) s =  32767.0f;
   if (s < -32768.0f) s = -32768.0f;
   return (int16_t)s;
@@ -164,7 +166,10 @@ static void sampleMicWhilePressed() {
     nextSampleUs += US_PER_SAMPLE;
 
     int16_t filtered = voiceFilter(analogRead(A0));
-    audioBuf[audioBufIdx++] = (int8_t)(filtered >> 8);
+    int16_t q = (filtered >> 6);
+    if (q > 127) q = 127;
+    else if (q < -128) q = -128;
+    audioBuf[audioBufIdx++] = (int8_t)q;
 
     if (audioBufIdx >= AUDIO_BUFSIZE) {
       sendAudioPacket();
@@ -340,8 +345,8 @@ void loop() {
   }
 
   int16_t iPx, iPy;
-  if (hasEmoji) {
-    // Freeze pupils only while emoji is shown.
+  if (hasEmoji || micActive) {
+    // Freeze pupils while emoji is shown or while recording button is held.
     fx = fy = 0.0f;
     iPx = iPy = 0;
   } else {

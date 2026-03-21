@@ -10,6 +10,7 @@ Button-gated audio pipeline:
 import io
 import json
 import logging
+import math
 import threading
 import time
 import wave
@@ -26,20 +27,59 @@ from arduino_client import ArduinoClient
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
-def _int8_samples_to_wav(samples, sample_rate):
-    """Convert signed int8 PCM samples to WAV bytes (mono PCM16 LE)."""
+def _samples_to_wav(samples, sample_rate):
+    """Convert int8/int16 PCM samples to WAV bytes (mono PCM16 LE).
+
+    Applies DC removal and robust p95 normalization so speech remains
+    transcribable even when transient spikes are present.
+    """
+    if not samples:
+        return b""
+
+    vals = [int(s) for s in samples]
+    peak = max(abs(v) for v in vals)
+    is_int8 = peak <= 128
+
+    # Remove capture DC offset before scaling.
+    mean = sum(vals) / float(len(vals))
+    centered = [v - mean for v in vals]
+
+    abs_vals = sorted(abs(int(v)) for v in centered)
+    p95 = abs_vals[int(0.95 * (len(abs_vals) - 1))] if abs_vals else 0
+
+    if is_int8:
+        target_p95 = 90.0
+        gain = min(16.0, (target_p95 / p95)) if p95 > 0 else 1.0
+        gate = 2
+    else:
+        target_p95 = 24000.0
+        gain = min(8.0, (target_p95 / p95)) if p95 > 0 else 1.0
+        gate = 150
+
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
-        for s in samples:
-            v = int(s)
-            if v > 127:
-                v = 127
-            elif v < -128:
-                v = -128
-            wf.writeframesraw(int(v << 8).to_bytes(2, "little", signed=True))
+        for s in centered:
+            v = int(s * gain)
+            if abs(v) <= gate:
+                v = 0
+
+            if is_int8:
+                if v > 127:
+                    v = 127
+                elif v < -128:
+                    v = -128
+                pcm16 = int(v << 8)
+            else:
+                if v > 32767:
+                    v = 32767
+                elif v < -32768:
+                    v = -32768
+                pcm16 = int(v)
+
+            wf.writeframesraw(pcm16.to_bytes(2, "little", signed=True))
     return buf.getvalue()
 
 
@@ -149,12 +189,17 @@ def main():
                         continue
 
                     print(f"[MIC] STOP after {elapsed:.2f}s, captured {len(captured)} samples")
+                    peak = max(abs(int(s)) for s in captured)
+                    rms = math.sqrt(sum(int(s) * int(s) for s in captured) / max(1, len(captured)))
+                    abs_sorted = sorted(abs(int(s)) for s in captured)
+                    p95 = abs_sorted[int(0.95 * (len(abs_sorted) - 1))] if abs_sorted else 0
+                    print(f"[MIC] Sample peak={peak} p95={p95} rms={rms:.1f} ({'int8' if peak <= 128 else 'int16'})")
 
                     if len(captured) < min_samples:
                         print("[MIC] Too short, skipping transcription.")
                         continue
 
-                    wav_bytes = _int8_samples_to_wav(captured, config.MCU_SAMPLE_RATE)
+                    wav_bytes = _samples_to_wav(captured, config.MCU_SAMPLE_RATE)
                     transcription = stt.transcribe_wav(wav_bytes)
 
                     sensor_json = json.dumps(current_sensors) if current_sensors else None
