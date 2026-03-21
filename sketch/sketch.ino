@@ -1,28 +1,31 @@
 /*
  * Ambient AI Assistant — MCU Firmware
  *
- * Audio transport: Bridge.notify("audio", int8[128]) → bridge_shim → VADBatcher
+ * Audio transport: Bridge.notify("audio", int8[128]) -> bridge_shim -> VADBatcher
  * Frame: 128 signed 8-bit PCM samples @ 8 kHz
  *
  * Sensor output (ASCII on same Monitor):
  *   TEMP:xx.x\r\n   HUM:xx.x\r\n   READY\r\n   MIC:START\r\n   MIC:STOP\r\n
  *
- * Display commands (Linux → MCU via mon/write):
- *   EMOJI:H\n  — happy (green)
- *   EMOJI:S\n  — sad/worried (red)
- *   EMOJI:N\n  — neutral (yellow)
- *   CLEAR\n    — idle face
+ * Display commands (Linux -> MCU via mon/write):
+ *   EMOJI:H\n  -- happy  :)
+ *   EMOJI:S\n  -- sad    :(
+ *   EMOJI:N\n  -- neutral :|
+ *   CLEAR\n    -- blank screen
  */
 
 #include <Arduino_RouterBridge.h>
 #include <SPI.h>
 #include <Wire.h>
 
-#define TFT_CS   10
-#define TFT_DC    9
-#define TFT_RST   8
-#define BTN_PIN   2
+// ---- Hardware pins ----
+// GC9A01A 240x240 round TFT: SCK=13 MOSI=11 CS=9 DC=10 RST=8
+#define TFT_CS   9
+#define TFT_DC  10
+#define TFT_RST  8
+#define BTN_PIN  2
 
+// ---- GC9A01A commands ----
 #define GC9A01_SLPOUT  0x11
 #define GC9A01_DISPON  0x29
 #define GC9A01_CASET   0x2A
@@ -32,19 +35,13 @@
 #define GC9A01_COLMOD  0x3A
 
 #define AHT20_ADDR  0x38
-#define DISP_SIZE 240
+#define DISP_SIZE   240
 
-// RGB565 color helpers
-// Display initialised with INVON (0x21): stored bits are inverted before display.
-// To show colour C, store ~C. INVRGB pre-inverts so macros produce correct screen colours.
-#define RGB565(r,g,b)  ((uint16_t)(((r>>3)<<11)|((g>>2)<<5)|(b>>3)))
-#define INVRGB(r,g,b)  ((uint16_t)(~RGB565(r,g,b)))
-#define COLOR_BLACK   0xFFFF        // store 0xFFFF → display black
-#define COLOR_WHITE   0x0000        // store 0x0000 → display white
-#define COLOR_GREEN   INVRGB(0,200,0)
-#define COLOR_RED     INVRGB(220,30,30)
-#define COLOR_YELLOW  INVRGB(240,220,0)
-#define COLOR_BLUE    INVRGB(0,100,255)
+// RGB565 colors (no INVON, normal polarity)
+#define COLOR_BLACK   0x0000
+#define COLOR_WHITE   0xFFFF
+#define COLOR_YELLOW  0xFFE0
+#define COLOR_CYAN    0x07FF
 
 static bool lastBtnState = false;
 static unsigned long lastDebounce = 0;
@@ -59,13 +56,13 @@ static bool ahtReady = false;
 #define AUDIO_BUFSIZE  128
 #define US_PER_SAMPLE  (1000000UL / SAMPLE_RATE)
 
-static float   dcEst    = 2048.0f;
-static float   smoothed = 0.0f;
-static int8_t  audioBuf[AUDIO_BUFSIZE];
-static int     audioBufIdx   = 0;
+static float    dcEst       = 2048.0f;
+static float    smoothed    = 0.0f;
+static int8_t   audioBuf[AUDIO_BUFSIZE];
+static int      audioBufIdx = 0;
 static uint32_t nextSampleUs = 0;
 
-// ---- Monitor command buffer (Linux → MCU) ----
+// ---- Monitor command buffer (Linux -> MCU) ----
 #define MON_CMD_SIZE 32
 static char monCmd[MON_CMD_SIZE];
 static int  monCmdLen = 0;
@@ -82,8 +79,9 @@ static int16_t voiceFilter(int raw) {
 }
 
 // ================================================================
-// GC9A01 raw SPI driver
+// GC9A01A raw SPI driver
 // ================================================================
+static const SPISettings kTftSPI(24000000, MSBFIRST, SPI_MODE0);
 
 static inline void tftCmd(uint8_t cmd) {
   digitalWrite(TFT_DC, LOW); digitalWrite(TFT_CS, LOW);
@@ -109,7 +107,6 @@ static void tftSetAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
   tftCmd(GC9A01_RASET); tftData16(y0); tftData16(y1);
   tftCmd(GC9A01_RAMWR);
 }
-static const SPISettings kTftSPI(24000000, MSBFIRST, SPI_MODE0);
 static void tftFillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
   if (x >= DISP_SIZE || y >= DISP_SIZE) return;
   if (x + w > DISP_SIZE) w = DISP_SIZE - x;
@@ -124,27 +121,12 @@ static void tftFillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t
   SPI.endTransaction();
 }
 static void tftFillScreen(uint16_t c) { tftFillRect(0, 0, DISP_SIZE, DISP_SIZE, c); }
-static void tftDrawPixel(uint16_t x, uint16_t y, uint16_t color) {
-  if (x >= DISP_SIZE || y >= DISP_SIZE) return;
-  SPI.beginTransaction(kTftSPI);
-  tftSetAddrWindow(x, y, x, y); tftData16(color);
-  SPI.endTransaction();
-}
-static void tftFillCircle(int16_t cx, int16_t cy, int16_t r, uint16_t color) {
-  for (int16_t dy = -r; dy <= r; dy++) {
-    int16_t dx = (int16_t)sqrt((float)(r*r - dy*dy));
-    int16_t x0 = cx - dx, y0 = cy + dy;
-    if (y0 >= 0 && y0 < DISP_SIZE && x0 < DISP_SIZE) {
-      int16_t x1 = cx + dx;
-      if (x0 < 0) x0 = 0;
-      if (x1 >= DISP_SIZE) x1 = DISP_SIZE - 1;
-      tftFillRect(x0, y0, x1 - x0 + 1, 1, color);
-    }
-  }
-}
+
 static void tftInit() {
   pinMode(TFT_CS, OUTPUT); pinMode(TFT_DC, OUTPUT); pinMode(TFT_RST, OUTPUT);
-  digitalWrite(TFT_RST, HIGH); delay(10); digitalWrite(TFT_RST, LOW); delay(10);
+  digitalWrite(TFT_CS, HIGH); digitalWrite(TFT_DC, HIGH);
+  digitalWrite(TFT_RST, HIGH); delay(10);
+  digitalWrite(TFT_RST, LOW);  delay(10);
   digitalWrite(TFT_RST, HIGH); delay(120);
   SPI.begin();
   SPI.beginTransaction(kTftSPI);
@@ -193,7 +175,7 @@ static void tftInit() {
   { uint8_t d[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00}; tftWriteCmd(0x67,d,7); }
   { uint8_t d[]={0x72,0x06}; tftWriteCmd(0x74,d,2); }
   { uint8_t d[]={0x80}; tftWriteCmd(0x35,d,1); }
-  tftCmd(0x21);
+  // Note: no 0x21 (INVON) — display polarity is normal
   tftCmd(GC9A01_SLPOUT); delay(120);
   tftCmd(GC9A01_DISPON);
   delay(20);
@@ -231,80 +213,80 @@ static bool ahtMeasure(float &temp, float &hum) {
 }
 
 // ================================================================
-// Display faces
+// Emoticon text renderer
+//
+// 5x7 bitmap font (column-major, LSB = top row).
+// Only the characters needed for :)  :(  :|  are included.
 // ================================================================
-static void drawIdleFace() {
-  tftFillScreen(COLOR_BLACK);
-  // Left eye
-  tftFillCircle(85, 105, 30, COLOR_WHITE);
-  tftFillCircle(90, 100, 12, COLOR_BLACK);
-  // Right eye
-  tftFillCircle(155, 105, 30, COLOR_WHITE);
-  tftFillCircle(160, 100, 12, COLOR_BLACK);
-  // Neutral mouth
-  for (int i = -25; i <= 25; i++) {
-    int x = 120 + i, y = 155 + (i * i) / 50;
-    tftDrawPixel(x, y, COLOR_WHITE);
-    tftDrawPixel(x, y + 1, COLOR_WHITE);
+
+// Each entry: 5 column bytes for a 5x7 glyph
+static const uint8_t GLYPH_COLON[5]  = {0x00, 0x36, 0x36, 0x00, 0x00}; // :
+static const uint8_t GLYPH_RPAREN[5] = {0x00, 0x41, 0x22, 0x14, 0x08}; // )
+static const uint8_t GLYPH_LPAREN[5] = {0x00, 0x08, 0x14, 0x22, 0x41}; // (
+static const uint8_t GLYPH_PIPE[5]   = {0x00, 0x00, 0x7F, 0x00, 0x00}; // |
+
+static const uint8_t* charGlyph(char c) {
+  switch (c) {
+    case ':': return GLYPH_COLON;
+    case ')': return GLYPH_RPAREN;
+    case '(': return GLYPH_LPAREN;
+    case '|': return GLYPH_PIPE;
+    default:  return nullptr;
   }
 }
 
-static void drawHappyFace() {
-  tftFillScreen(COLOR_GREEN);
-  // Eyes
-  tftFillCircle(85, 100, 25, COLOR_WHITE);
-  tftFillCircle(90, 95, 10, COLOR_BLACK);
-  tftFillCircle(155, 100, 25, COLOR_WHITE);
-  tftFillCircle(160, 95, 10, COLOR_BLACK);
-  // Happy mouth (upward curve)
-  for (int i = -30; i <= 30; i++) {
-    int x = 120 + i, y = 160 - (i * i) / 30;
-    tftDrawPixel(x, y, COLOR_WHITE);
-    tftDrawPixel(x, y + 1, COLOR_WHITE);
-    tftDrawPixel(x, y + 2, COLOR_WHITE);
+// Draw one character at pixel (x, y), each font pixel blown up to scale x scale
+static void tftDrawChar(int16_t x, int16_t y, char c, uint8_t scale, uint16_t color) {
+  const uint8_t* g = charGlyph(c);
+  if (!g) return;
+  for (uint8_t col = 0; col < 5; col++) {
+    uint8_t bits = g[col];
+    for (uint8_t row = 0; row < 7; row++) {
+      if (bits & (1 << row)) {
+        tftFillRect(x + col * scale, y + row * scale, scale, scale, color);
+      }
+    }
   }
 }
 
-static void drawSadFace() {
-  tftFillScreen(COLOR_RED);
-  // Eyes (downward slant)
-  tftFillCircle(85, 105, 25, COLOR_WHITE);
-  tftFillCircle(90, 110, 10, COLOR_BLACK);
-  tftFillCircle(155, 105, 25, COLOR_WHITE);
-  tftFillCircle(160, 110, 10, COLOR_BLACK);
-  // Sad mouth (downward curve)
-  for (int i = -25; i <= 25; i++) {
-    int x = 120 + i, y = 170 + (i * i) / 25;
-    tftDrawPixel(x, y, COLOR_WHITE);
-    tftDrawPixel(x, y + 1, COLOR_WHITE);
-    tftDrawPixel(x, y + 2, COLOR_WHITE);
+// Draw a string. Returns total pixel width drawn.
+// Character cell: 5 cols + 1 gap = 6 units wide at given scale
+static int16_t tftDrawString(int16_t x, int16_t y, const char* str, uint8_t scale, uint16_t color) {
+  int16_t cx = x;
+  while (*str) {
+    tftDrawChar(cx, y, *str, scale, color);
+    cx += 6 * scale;
+    str++;
   }
+  return cx - x;
 }
 
-static void drawNeutralFace() {
-  tftFillScreen(COLOR_YELLOW);
-  // Eyes
-  tftFillCircle(85, 105, 25, COLOR_WHITE);
-  tftFillCircle(90, 100, 10, COLOR_BLACK);
-  tftFillCircle(155, 105, 25, COLOR_WHITE);
-  tftFillCircle(160, 100, 10, COLOR_BLACK);
-  // Flat mouth
-  tftFillRect(90, 158, 60, 4, COLOR_WHITE);
+// Width of a string in pixels at given scale
+static int16_t strPixelW(const char* str, uint8_t scale) {
+  int16_t n = 0;
+  while (*str++) n++;
+  return n > 0 ? n * 6 * scale - scale : 0; // last char has no trailing gap
+}
+
+// Draw an emoticon centred on the screen
+static void showEmoticon(const char* text, uint16_t fg, uint16_t bg) {
+  tftFillScreen(bg);
+  const uint8_t scale = 18;          // each font pixel = 18x18 screen pixels
+  int16_t w = strPixelW(text, scale);
+  int16_t h = 7 * scale;
+  int16_t x = (DISP_SIZE - w) / 2;
+  int16_t y = (DISP_SIZE - h) / 2;
+  tftDrawString(x, y, text, scale, fg);
 }
 
 // ================================================================
-// Monitor command parser (Linux → MCU)
+// Monitor command parser (Linux -> MCU)
 // ================================================================
 static void handleMonitorCmd(const char* cmd) {
-  if (strncmp(cmd, "EMOJI:H", 7) == 0) {
-    drawHappyFace();
-  } else if (strncmp(cmd, "EMOJI:S", 7) == 0) {
-    drawSadFace();
-  } else if (strncmp(cmd, "EMOJI:N", 7) == 0) {
-    drawNeutralFace();
-  } else if (strncmp(cmd, "CLEAR", 5) == 0) {
-    drawIdleFace();
-  }
+  if      (strncmp(cmd, "EMOJI:H", 7) == 0) showEmoticon(":)", COLOR_WHITE, COLOR_BLACK);
+  else if (strncmp(cmd, "EMOJI:S", 7) == 0) showEmoticon(":(", COLOR_WHITE, COLOR_BLACK);
+  else if (strncmp(cmd, "EMOJI:N", 7) == 0) showEmoticon(":|", COLOR_WHITE, COLOR_BLACK);
+  else if (strncmp(cmd, "CLEAR",   5) == 0) tftFillScreen(COLOR_BLACK);
 }
 
 static void pollMonitorCommands() {
@@ -334,7 +316,11 @@ void setup() {
   analogReadResolution(12);
 
   tftInit();
-  drawIdleFace();
+  // Solid white fill — if the display works you will see a white screen
+  tftFillScreen(COLOR_WHITE);
+  delay(500);
+  // Then go dark and show the idle "ready" emoticon
+  showEmoticon(":)", COLOR_YELLOW, COLOR_BLACK);
 
   ahtReady = ahtInit();
   if (!ahtReady) Monitor.println("ERR:AHT20_NOT_FOUND");
