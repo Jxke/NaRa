@@ -111,14 +111,12 @@ static void tftFillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t
   if (x >= DISP_SIZE || y >= DISP_SIZE) return;
   if (x + w > DISP_SIZE) w = DISP_SIZE - x;
   if (y + h > DISP_SIZE) h = DISP_SIZE - y;
-  SPI.beginTransaction(kTftSPI);
   tftSetAddrWindow(x, y, x+w-1, y+h-1);
   uint8_t hi = color >> 8, lo = color & 0xFF;
   uint32_t n = (uint32_t)w * h;
   digitalWrite(TFT_DC, HIGH); digitalWrite(TFT_CS, LOW);
   for (uint32_t i = 0; i < n; i++) { SPI.transfer(hi); SPI.transfer(lo); }
   digitalWrite(TFT_CS, HIGH);
-  SPI.endTransaction();
 }
 static void tftFillScreen(uint16_t c) { tftFillRect(0, 0, DISP_SIZE, DISP_SIZE, c); }
 
@@ -127,59 +125,17 @@ static void tftInit() {
   digitalWrite(TFT_CS, HIGH); digitalWrite(TFT_DC, HIGH);
   digitalWrite(TFT_RST, HIGH); delay(10);
   digitalWrite(TFT_RST, LOW);  delay(10);
-  digitalWrite(TFT_RST, HIGH); delay(120);
+  digitalWrite(TFT_RST, HIGH); delay(150);
   SPI.begin();
-  SPI.beginTransaction(kTftSPI);
-  tftCmd(0xEF);
-  { uint8_t d[]={0x14}; tftWriteCmd(0xEB,d,1); }
-  tftCmd(0xFE); tftCmd(0xEF);
-  { uint8_t d[]={0x14}; tftWriteCmd(0xEB,d,1); }
-  { uint8_t d[]={0x14}; tftWriteCmd(0x84,d,1); }
-  { uint8_t d[]={0x14}; tftWriteCmd(0x85,d,1); }
-  { uint8_t d[]={0x14}; tftWriteCmd(0x86,d,1); }
-  { uint8_t d[]={0x14}; tftWriteCmd(0x87,d,1); }
-  { uint8_t d[]={0x0A}; tftWriteCmd(0x88,d,1); }
-  { uint8_t d[]={0x21}; tftWriteCmd(0x89,d,1); }
-  { uint8_t d[]={0x08}; tftWriteCmd(0x8A,d,1); }
-  { uint8_t d[]={0x80}; tftWriteCmd(0x8B,d,1); }
-  { uint8_t d[]={0x01}; tftWriteCmd(0x8C,d,1); }
-  { uint8_t d[]={0x01}; tftWriteCmd(0x8D,d,1); }
-  { uint8_t d[]={0xFF}; tftWriteCmd(0x8E,d,1); }
-  { uint8_t d[]={0xFF}; tftWriteCmd(0x8F,d,1); }
-  { uint8_t d[]={0x00,0x20}; tftWriteCmd(0xB6,d,2); }
-  { uint8_t d[]={0x08}; tftWriteCmd(GC9A01_MADCTL,d,1); }
-  { uint8_t d[]={0x05}; tftWriteCmd(GC9A01_COLMOD,d,1); }
-  { uint8_t d[]={0x08,0x08,0x08,0x08}; tftWriteCmd(0x90,d,4); }
-  { uint8_t d[]={0x06}; tftWriteCmd(0xBD,d,1); }
-  { uint8_t d[]={0x00}; tftWriteCmd(0xBC,d,1); }
-  { uint8_t d[]={0x60,0x01,0x04}; tftWriteCmd(0xFF,d,3); }
-  { uint8_t d[]={0x13}; tftWriteCmd(0xC3,d,1); }
-  { uint8_t d[]={0x13}; tftWriteCmd(0xC4,d,1); }
-  { uint8_t d[]={0x22}; tftWriteCmd(0xC9,d,1); }
-  { uint8_t d[]={0x11}; tftWriteCmd(0xBE,d,1); }
-  { uint8_t d[]={0x10,0x0E}; tftWriteCmd(0xE1,d,2); }
-  { uint8_t d[]={0x21,0x0C}; tftWriteCmd(0xDF,d,2); }
-  { uint8_t d[]={0x45,0x09,0x08,0x08,0x26,0x2A}; tftWriteCmd(0xF0,d,6); }
-  { uint8_t d[]={0x43,0x70,0x72,0x36,0x37,0x6F}; tftWriteCmd(0xF1,d,6); }
-  { uint8_t d[]={0x45,0x09,0x08,0x08,0x26,0x2A}; tftWriteCmd(0xF2,d,6); }
-  { uint8_t d[]={0x43,0x70,0x72,0x36,0x37,0x6F}; tftWriteCmd(0xF3,d,6); }
-  { uint8_t d[]={0x1B,0x0B}; tftWriteCmd(0xED,d,2); }
-  { uint8_t d[]={0x77}; tftWriteCmd(0xAE,d,1); }
-  { uint8_t d[]={0x63}; tftWriteCmd(0xCD,d,1); }
-  { uint8_t d[]={0x07,0x07,0x04,0x0E,0x0F,0x09,0x07,0x08,0x03}; tftWriteCmd(0x70,d,9); }
-  { uint8_t d[]={0x34}; tftWriteCmd(0xE8,d,1); }
-  { uint8_t d[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x20}; tftWriteCmd(0x62,d,14); }
-  { uint8_t d[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x20}; tftWriteCmd(0x63,d,14); }
-  { uint8_t d[]={0x33,0x33,0x33,0x33,0x33,0x33,0x33,0x33,0x33,0x33}; tftWriteCmd(0x64,d,10); }
-  { uint8_t d[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00}; tftWriteCmd(0x66,d,7); }
-  { uint8_t d[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00}; tftWriteCmd(0x67,d,7); }
-  { uint8_t d[]={0x72,0x06}; tftWriteCmd(0x74,d,2); }
-  { uint8_t d[]={0x80}; tftWriteCmd(0x35,d,1); }
-  // Note: no 0x21 (INVON) — display polarity is normal
+  SPI.beginTransaction(kTftSPI);  // stays open for the lifetime of the sketch
+  tftCmd(0xEF);   // inter-register enable 1
+  tftCmd(0xFE);   // inter-register enable 2
   tftCmd(GC9A01_SLPOUT); delay(120);
-  tftCmd(GC9A01_DISPON);
-  delay(20);
-  SPI.endTransaction();
+  { uint8_t d[]={0x55}; tftWriteCmd(GC9A01_COLMOD,d,1); }  // 16-bit RGB565
+  { uint8_t d[]={0x08}; tftWriteCmd(GC9A01_MADCTL, d,1); }  // row/col order: normal
+  tftCmd(0x20);   // INVOFF — no display inversion
+  tftCmd(GC9A01_DISPON); delay(20);
+  // SPI transaction intentionally left open
 }
 
 // ================================================================
@@ -316,10 +272,11 @@ void setup() {
   analogReadResolution(12);
 
   tftInit();
-  // Solid white fill — if the display works you will see a white screen
-  tftFillScreen(COLOR_WHITE);
-  delay(500);
-  // Then go dark and show the idle "ready" emoticon
+  // Diagnostic: cycle red → green → blue → black; each should be solid
+  tftFillScreen(0xF800); delay(800);   // RED
+  tftFillScreen(0x07E0); delay(800);   // GREEN
+  tftFillScreen(0x001F); delay(800);   // BLUE
+  tftFillScreen(COLOR_BLACK);
   showEmoticon(":)", COLOR_YELLOW, COLOR_BLACK);
 
   ahtReady = ahtInit();
