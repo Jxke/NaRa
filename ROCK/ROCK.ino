@@ -67,7 +67,7 @@ const unsigned long BTN_DEBOUNCE_MS = 35;
 #define DECIM_FACTOR      (RAW_SAMPLE_RATE / SAMPLE_RATE)
 #define AUDIO_BUFSIZE     128
 #define US_PER_RAW_SAMPLE (1000000UL / RAW_SAMPLE_RATE)
-#define MAX_RAW_PER_SLICE 64
+#define MAX_RAW_PER_SLICE 256
 
 static_assert((RAW_SAMPLE_RATE % SAMPLE_RATE) == 0,
               "RAW_SAMPLE_RATE must be an integer multiple of SAMPLE_RATE");
@@ -77,6 +77,7 @@ float    smoothed       = 0.0f;
 int8_t   audioBuf[AUDIO_BUFSIZE];
 int      audioBufIdx    = 0;
 uint32_t nextRawSampleUs = 0;
+uint32_t streamedSamples = 0;
 
 // 4-sample moving-average filter state for anti-aliasing before decimation.
 int16_t aaHist[4] = {2048, 2048, 2048, 2048};
@@ -142,11 +143,10 @@ static int16_t voiceFilter(float raw) {
 
 static void sendAudioPacket() {
   // Monitor binary frame: 0x01 0x80 + 128 signed int8 samples.
-  Monitor.write((uint8_t)0x01);
-  Monitor.write((uint8_t)0x80);
-  for (int i = 0; i < AUDIO_BUFSIZE; i++) {
-    Monitor.write((uint8_t)audioBuf[i]);
-  }
+  static const uint8_t kSync[2] = {0x01, 0x80};
+  Monitor.write(kSync, 2);
+  Monitor.write((const uint8_t*)audioBuf, AUDIO_BUFSIZE);
+  streamedSamples += AUDIO_BUFSIZE;
 }
 
 static void startMicCapture() {
@@ -164,6 +164,7 @@ static void startMicCapture() {
   decimPhase = 0;
 
   nextRawSampleUs = micros();
+  streamedSamples = 0;
   Monitor.println("MIC:START");
 }
 
@@ -176,6 +177,8 @@ static void stopMicCapture() {
     audioBufIdx = 0;
   }
   micActive = false;
+  Monitor.print("MIC:SAMPLES:");
+  Monitor.println((int)streamedSamples);
   Monitor.println("MIC:STOP");
 }
 
