@@ -44,6 +44,15 @@ def _samples_to_wav(samples, sample_rate):
     mean = sum(vals) / float(len(vals))
     centered = [v - mean for v in vals]
 
+    # Pre-emphasis: boost high frequencies to restore consonants lost at 8 kHz.
+    # y[n] = x[n] - 0.85*x[n-1]; fc ≈ 190 Hz so everything above that gets lifted.
+    prev_v = 0.0
+    emph = []
+    for v in centered:
+        emph.append(v - 0.85 * prev_v)
+        prev_v = float(v)
+    centered = emph
+
     abs_vals = sorted(abs(int(v)) for v in centered)
     p95 = abs_vals[int(0.95 * (len(abs_vals) - 1))] if abs_vals else 0
 
@@ -131,6 +140,9 @@ def main():
     recording_started_at = 0.0
     max_samples = int(config.MAX_RECORD_S * config.MCU_SAMPLE_RATE)
     min_samples = int(config.MIN_BUTTON_RECORD_S * config.MCU_SAMPLE_RATE)
+    mcu_reported_samples = None
+    mcu_elapsed_us = None
+    mcu_overflow = None
 
     def on_audio(samples):
         nonlocal recording, recording_samples
@@ -166,6 +178,9 @@ def main():
                         recording = True
                         recording_samples = []
                         recording_started_at = time.time()
+                        mcu_reported_samples = None
+                        mcu_elapsed_us = None
+                        mcu_overflow = None
                     print("[MIC] START (button pressed)")
                     continue
 
@@ -184,18 +199,44 @@ def main():
                         print("[MIC] STOP (no captured audio)")
                         continue
 
+                    if mcu_reported_samples and mcu_reported_samples > 0:
+                        if len(captured) > mcu_reported_samples:
+                            captured = captured[:mcu_reported_samples]
+                        elif len(captured) < mcu_reported_samples:
+                            print(
+                                f"[MIC] Warning: captured {len(captured)} < mcu_reported_samples {mcu_reported_samples}"
+                            )
+
                     print(f"[MIC] STOP after {elapsed:.2f}s, captured {len(captured)} samples")
                     peak = max(abs(int(s)) for s in captured)
                     rms = math.sqrt(sum(int(s) * int(s) for s in captured) / max(1, len(captured)))
                     abs_sorted = sorted(abs(int(s)) for s in captured)
                     p95 = abs_sorted[int(0.95 * (len(abs_sorted) - 1))] if abs_sorted else 0
                     print(f"[MIC] Sample peak={peak} p95={p95} rms={rms:.1f} ({'int8' if peak <= 128 else 'int16'})")
+                    if mcu_overflow is not None:
+                        print(f"[MIC] Overflow={mcu_overflow}")
 
                     if len(captured) < min_samples:
                         print("[MIC] Too short, skipping transcription.")
                         continue
 
-                    wav_bytes = _samples_to_wav(captured, config.MCU_SAMPLE_RATE)
+                    effective_rate = config.MCU_SAMPLE_RATE
+                    rate_source = "nominal"
+                    if mcu_reported_samples and mcu_elapsed_us and mcu_elapsed_us > 0:
+                        effective_rate = int(round(mcu_reported_samples * 1_000_000.0 / mcu_elapsed_us))
+                        effective_rate = max(3000, min(16000, effective_rate))
+                        rate_source = "mcu_timing"
+                    elif elapsed > 0.20 and len(captured) >= min_samples:
+                        effective_rate = int(round(len(captured) / elapsed))
+                        effective_rate = max(3000, min(16000, effective_rate))
+                        rate_source = "linux_elapsed"
+
+                    print(
+                        f"[MIC] Rate nominal={config.MCU_SAMPLE_RATE}Hz effective={effective_rate}Hz "
+                        f"(source={rate_source} mcu_samples={mcu_reported_samples} mcu_elapsed_us={mcu_elapsed_us})"
+                    )
+
+                    wav_bytes = _samples_to_wav(captured, effective_rate)
                     transcription = stt.transcribe_wav(wav_bytes)
 
                     sensor_json = json.dumps(current_sensors) if current_sensors else None
@@ -205,6 +246,27 @@ def main():
                         handle_query(transcription)
                     else:
                         print("[MIC] No speech recognised.")
+                    continue
+
+                if line.startswith("MIC:SAMPLES:"):
+                    try:
+                        mcu_reported_samples = int(line.split(":", 2)[2])
+                    except (TypeError, ValueError):
+                        mcu_reported_samples = None
+                    continue
+
+                if line.startswith("MIC:ELAPSED_US:"):
+                    try:
+                        mcu_elapsed_us = int(line.split(":", 2)[2])
+                    except (TypeError, ValueError):
+                        mcu_elapsed_us = None
+                    continue
+
+                if line.startswith("MIC:OVERFLOW:"):
+                    try:
+                        mcu_overflow = int(line.split(":", 2)[2])
+                    except (TypeError, ValueError):
+                        mcu_overflow = None
                     continue
 
                 parsed = bridge.parse_sensor_line(line)
