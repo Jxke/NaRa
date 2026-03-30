@@ -34,9 +34,14 @@ from PIL import Image
 # 90 px fills the inner eye circle (radius 53) nicely; corners are clipped
 # by the circular mask, giving a natural round crop.
 # ---------------------------------------------------------------------------
-EMOJI_BLIT_SIZE = 90
+# 72 px = native Twemoji PNG resolution (no upscaling, best quality).
+# 4 emoji × 72×72 × 2 bytes = 41 472 bytes — fits in the 48 KB flash
+# budget available after the Zephyr kernel in bank 1 (load addr 0x080F0000).
+# Larger tiles or more emoji overflow into flash bank 2, which the Zephyr
+# MPU blocks from application read access, causing a silent crash.
+EMOJI_BLIT_SIZE = 72
 
-DEFAULTS = ["😊", "😂", "🎉", "🌟", "🔥", "😎", "😍", "🤖"]
+DEFAULTS = ["😊", "😂", "🎉", "🔥"]
 
 TWEMOJI_URL = (
     "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{cp}.png"

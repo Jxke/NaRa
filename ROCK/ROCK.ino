@@ -83,16 +83,16 @@ void drawEyeFB(int16_t cx, int16_t cy, int16_t px, int16_t py) {
   display.drawRGBBitmap(cx - EYE_R, cy - EYE_R, eyeBuf, DIAM, DIAM);
 }
 
-// --- Render one emoji (by pool index) into an eye framebuffer and blit ---
-// The tile (EMOJI_BLIT_SIZE×EMOJI_BLIT_SIZE) is centred on the eye; the
-// circular outline mask naturally crops the corners into a round display.
+// --- Render one emoji scaled to fill the eye circle ---
+// Maps every pixel inside the inner eye circle (radius = EYE_R-OUTLINE = 53)
+// linearly onto the EMOJI_BLIT_SIZE×EMOJI_BLIT_SIZE tile, so the emoji
+// always fills the eye regardless of tile size.  Integer-only, no floats.
 void drawEmojiEyeFB(int16_t cx, int16_t cy, uint8_t idx) {
-  const int16_t ER = EMOJI_BLIT_SIZE / 2;
+  const int16_t IR = EYE_R - OUTLINE; // inner radius = 53
 
   for (int16_t row = 0; row < DIAM; row++) {
     int32_t ey  = row - EYE_R;
     int32_t ey2 = ey * ey;
-    int     by  = (row - EYE_R) + ER;   // tile row index
 
     for (int16_t col = 0; col < DIAM; col++) {
       int32_t ex  = col - EYE_R;
@@ -100,16 +100,16 @@ void drawEmojiEyeFB(int16_t cx, int16_t cy, uint8_t idx) {
 
       uint16_t color;
       if (er2 > EYE_R2) {
-        color = 0xFFFF; // outside eye circle → white display bg
+        color = 0xFFFF; // outside eye → white display bg
       } else if (er2 >= INNER_R2) {
         color = 0x0000; // black outline ring
       } else {
-        int bx = (col - EYE_R) + ER;  // tile col index
-        if (bx >= 0 && bx < EMOJI_BLIT_SIZE && by >= 0 && by < EMOJI_BLIT_SIZE) {
-          color = emojiData[idx][by * EMOJI_BLIT_SIZE + bx];
-        } else {
-          color = 0xFFFF; // eye white outside tile
-        }
+        // Scale inner circle [-IR,IR] → tile [0, EMOJI_BLIT_SIZE)
+        int bx = (EMOJI_BLIT_SIZE * (int)(ex + IR)) / (2 * IR);
+        int by = (EMOJI_BLIT_SIZE * (int)(ey + IR)) / (2 * IR);
+        bx = constrain(bx, 0, EMOJI_BLIT_SIZE - 1);
+        by = constrain(by, 0, EMOJI_BLIT_SIZE - 1);
+        color = emojiData[idx][by * EMOJI_BLIT_SIZE + bx];
       }
       eyeBuf[row * DIAM + col] = color;
     }
