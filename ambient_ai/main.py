@@ -14,6 +14,8 @@ import math
 import threading
 import time
 import wave
+from datetime import datetime
+from pathlib import Path
 
 import bridge
 import config
@@ -90,6 +92,93 @@ def _samples_to_wav(samples, sample_rate):
 
             wf.writeframesraw(pcm16.to_bytes(2, "little", signed=True))
     return buf.getvalue()
+
+
+def _samples_to_raw_wav(samples, sample_rate):
+    """Write raw int8/int16 samples to PCM16 WAV without normalization."""
+    if not samples:
+        return b""
+
+    vals = [int(s) for s in samples]
+    peak = max(abs(v) for v in vals)
+    is_int8 = peak <= 128
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        for s in vals:
+            if is_int8:
+                if s > 127:
+                    s = 127
+                elif s < -128:
+                    s = -128
+                pcm16 = int(s << 8)
+            else:
+                if s > 32767:
+                    s = 32767
+                elif s < -32768:
+                    s = -32768
+                pcm16 = int(s)
+            wf.writeframesraw(pcm16.to_bytes(2, "little", signed=True))
+    return buf.getvalue()
+
+
+def _save_capture_diagnostics(
+    captured,
+    wav_bytes,
+    raw_wav_bytes,
+    transcription,
+    effective_rate,
+    elapsed,
+    mcu_reported_samples,
+    mcu_elapsed_us,
+    mcu_overflow,
+    peak,
+    p95,
+    rms,
+):
+    diag_dir = Path(config.BASE_DIR) / "diagnostics"
+    diag_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stem = f"button_capture_{ts}"
+    raw_name = f"{stem}_raw.wav"
+    norm_name = f"{stem}_norm.wav"
+    meta_name = f"{stem}_meta.json"
+
+    raw_path = diag_dir / raw_name
+    norm_path = diag_dir / norm_name
+    meta_path = diag_dir / meta_name
+
+    raw_path.write_bytes(raw_wav_bytes)
+    norm_path.write_bytes(wav_bytes)
+
+    clip_pct_int8 = 0.0
+    if captured and peak <= 128:
+        clipped = sum(1 for s in captured if abs(int(s)) >= 127)
+        clip_pct_int8 = 100.0 * clipped / float(len(captured))
+
+    meta = {
+        "sample_rate": effective_rate,
+        "nominal_rate": config.MCU_SAMPLE_RATE,
+        "samples": len(captured),
+        "duration_s": (len(captured) / float(effective_rate)) if effective_rate > 0 else 0.0,
+        "capture_window_s": elapsed,
+        "mcu_reported_samples": mcu_reported_samples,
+        "mcu_elapsed_us": mcu_elapsed_us,
+        "mcu_overflow": mcu_overflow,
+        "peak": peak,
+        "p95": p95,
+        "rms": rms,
+        "clip_pct_int8": clip_pct_int8,
+        "raw_wav": f"diagnostics/{raw_name}",
+        "normalized_wav": f"diagnostics/{norm_name}",
+        "whisper_text": transcription or "",
+    }
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return raw_path, norm_path, meta_path
 
 
 def handle_query(transcription):
@@ -238,6 +327,24 @@ def main():
 
                     wav_bytes = _samples_to_wav(captured, effective_rate)
                     transcription = stt.transcribe_wav(wav_bytes)
+                    raw_wav_bytes = _samples_to_raw_wav(captured, effective_rate)
+                    raw_path, norm_path, meta_path = _save_capture_diagnostics(
+                        captured=captured,
+                        wav_bytes=wav_bytes,
+                        raw_wav_bytes=raw_wav_bytes,
+                        transcription=transcription,
+                        effective_rate=effective_rate,
+                        elapsed=elapsed,
+                        mcu_reported_samples=mcu_reported_samples,
+                        mcu_elapsed_us=mcu_elapsed_us,
+                        mcu_overflow=mcu_overflow,
+                        peak=peak,
+                        p95=p95,
+                        rms=rms,
+                    )
+                    print(f"[DIAG] Raw WAV:  {raw_path}")
+                    print(f"[DIAG] Norm WAV: {norm_path}")
+                    print(f"[DIAG] Meta:     {meta_path}")
 
                     sensor_json = json.dumps(current_sensors) if current_sensors else None
                     db.insert_snapshot(sensor_json, transcription or None)

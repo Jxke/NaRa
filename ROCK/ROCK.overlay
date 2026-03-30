@@ -1,0 +1,33 @@
+/*
+ * ROCK.overlay - SAI1 Block B pin configuration for INMP441 I2S microphone
+ *
+ * INMP441 wiring:
+ *   SCK -> D2 / PB3  (SAI1_SCK_B, AF3)
+ *   WS  -> A0 / PA4  (SAI1_FS_B,  AF3)
+ *   SD  -> PC3        (SAI1_SD_B,  AF3)
+ *   L/R -> GND        (left channel)
+ */
+
+&pinctrl {
+    sai1_sck_b_pb3: sai1_sck_b_pb3 {
+        pinmux = <STM32_PINMUX('B', 3, AF3)>;
+        slew-rate = "very-high-speed";
+    };
+    sai1_fs_b_pa4: sai1_fs_b_pa4 {
+        pinmux = <STM32_PINMUX('A', 4, AF3)>;
+        slew-rate = "very-high-speed";
+    };
+    sai1_sd_b_pc3: sai1_sd_b_pc3 {
+        pinmux = <STM32_PINMUX('C', 3, AF3)>;
+    };
+};
+
+&sai1 {
+    status = "okay";
+};
+
+i2s_sai1b: &sai1b {
+    status = "okay";
+    pinctrl-0 = <&sai1_sck_b_pb3 &sai1_fs_b_pa4 &sai1_sd_b_pc3>;
+    pinctrl-names = "default";
+};
