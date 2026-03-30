@@ -106,7 +106,7 @@ void drawEmojiEyeFB(int16_t cx, int16_t cy, uint8_t idx) {
       } else {
         int bx = (col - EYE_R) + ER;  // tile col index
         if (bx >= 0 && bx < EMOJI_BLIT_SIZE && by >= 0 && by < EMOJI_BLIT_SIZE) {
-          color = pgm_read_word(&emojiData[idx][by * EMOJI_BLIT_SIZE + bx]);
+          color = emojiData[idx][by * EMOJI_BLIT_SIZE + bx];
         } else {
           color = 0xFFFF; // eye white outside tile
         }

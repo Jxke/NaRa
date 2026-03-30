@@ -127,8 +127,10 @@ def main() -> None:
         all_pixels.append(to_rgb565(img))
         print("done")
 
+    # No PROGMEM — on ARM/Zephyr, const globals go to .rodata (flash) already.
+    # Using PROGMEM causes LMA/VMA mismatch on Zephyr and breaks pointer access.
     lines.append(
-        f"const uint16_t emojiData[EMOJI_COUNT][{n_px}] PROGMEM = {{"
+        f"const uint16_t emojiData[EMOJI_COUNT][{n_px}] = {{"
     )
     for idx, pixels in enumerate(all_pixels):
         cols  = 12
