@@ -116,20 +116,32 @@ def main() -> None:
         "",
     ]
 
+    n_px = EMOJI_BLIT_SIZE * EMOJI_BLIT_SIZE
+
+    # Collect all pixel rows first, then write a single 2-D PROGMEM array.
+    # This avoids a pointer-pool that can break on Zephyr's memory model.
+    all_pixels: list[list[int]] = []
     for idx, char in enumerate(emojis):
         print(f"Fetching {char} ({codepoint_str(char)}) ...", end=" ", flush=True)
-        img    = fetch_png(char)
-        pixels = to_rgb565(img)
-        lines.append(c_array(f"emoji{idx}", pixels))
-        lines.append("")
+        img = fetch_png(char)
+        all_pixels.append(to_rgb565(img))
         print("done")
 
-    # Pointer pool — lets the sketch index at runtime without a switch/case
-    pool_entries = ", ".join(f"emoji{i}" for i in range(len(emojis)))
-    lines += [
-        f"const uint16_t * const emojiPool[EMOJI_COUNT] = {{ {pool_entries} }};",
-        "",
-    ]
+    lines.append(
+        f"const uint16_t emojiData[EMOJI_COUNT][{n_px}] PROGMEM = {{"
+    )
+    for idx, pixels in enumerate(all_pixels):
+        cols  = 12
+        inner = []
+        for i in range(0, n_px, cols):
+            chunk = pixels[i : i + cols]
+            inner.append("    " + ", ".join(f"0x{v:04X}" for v in chunk))
+        trail = "," if idx < len(all_pixels) - 1 else ""
+        lines.append("  {")
+        lines.append(",\n".join(inner))
+        lines.append("  }" + trail)
+    lines.append("};")
+    lines.append("")
 
     out.write_text("\n".join(lines))
     print(f"\nWritten → {out}  ({len(emojis)} emoji, {EMOJI_BLIT_SIZE}px tiles)")

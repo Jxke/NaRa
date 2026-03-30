@@ -87,8 +87,7 @@ void drawEyeFB(int16_t cx, int16_t cy, int16_t px, int16_t py) {
 // The tile (EMOJI_BLIT_SIZE×EMOJI_BLIT_SIZE) is centred on the eye; the
 // circular outline mask naturally crops the corners into a round display.
 void drawEmojiEyeFB(int16_t cx, int16_t cy, uint8_t idx) {
-  const int16_t          ER  = EMOJI_BLIT_SIZE / 2;
-  const uint16_t * const src = emojiPool[idx];
+  const int16_t ER = EMOJI_BLIT_SIZE / 2;
 
   for (int16_t row = 0; row < DIAM; row++) {
     int32_t ey  = row - EYE_R;
@@ -107,7 +106,7 @@ void drawEmojiEyeFB(int16_t cx, int16_t cy, uint8_t idx) {
       } else {
         int bx = (col - EYE_R) + ER;  // tile col index
         if (bx >= 0 && bx < EMOJI_BLIT_SIZE && by >= 0 && by < EMOJI_BLIT_SIZE) {
-          color = pgm_read_word(&src[by * EMOJI_BLIT_SIZE + bx]);
+          color = pgm_read_word(&emojiData[idx][by * EMOJI_BLIT_SIZE + bx]);
         } else {
           color = 0xFFFF; // eye white outside tile
         }
