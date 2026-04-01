@@ -1,0 +1,211 @@
+[1/10] cmd.exe /C "cd /D C:\Users\Jake\Documents\GitHub\ROCK\esp32-llm\build\esp-idf\main && C:\Users\Jake\.espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:/Users/Jake/esp/esp-idf/components/spiffs/spiffsgen.py 0x200000 C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/data C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/build/data.bin --page-size=256 --obj-name-len=32 --meta-len=4 --use-magic --use-magic-len"
+[2/10] Performing build step for 'bootloader'
+[1/1] cmd.exe /C "cd /D C:\Users\Jake\Documents\GitHub\ROCK\esp32-llm\build\bootloader\esp-idf\esptool_py && C:\Users\Jake\.espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:/Users/Jake/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/build/bootloader/bootloader.bin"
+Bootloader binary size 0x5260 bytes. 0x2da0 bytes (36%) free.
+[3/8] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/llm.c.obj
+FAILED: esp-idf/main/CMakeFiles/__idf_main.dir/llm.c.obj 
+ccache C:\Users\Jake\.espressif\tools\xtensa-esp-elf\esp-13.2.0_20240530\xtensa-esp-elf\bin\xtensa-esp32s3-elf-gcc.exe -DESP_PLATFORM -DIDF_VER=\"v5.3\" -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -DUNITY_INCLUDE_CONFIG_H -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/build/config -IC:/Users/Jake/esp/esp-idf/components/newlib/platform_include -IC:/Users/Jake/esp/esp-idf/components/freertos/config/include -IC:/Users/Jake/esp/esp-idf/components/freertos/config/include/freertos -IC:/Users/Jake/esp/esp-idf/components/freertos/config/xtensa/include -IC:/Users/Jake/esp/esp-idf/components/freertos/FreeRTOS-Kernel/include -IC:/Users/Jake/esp/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -IC:/Users/Jake/esp/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -IC:/Users/Jake/esp/esp-idf/components/freertos/esp_additions/include -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/include -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/include/soc -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/include/soc/esp32s3 -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/dma/include -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/ldo/include -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/port/esp32s3/. -IC:/Users/Jake/esp/esp-idf/components/esp_hw_support/port/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/heap/include -IC:/Users/Jake/esp/esp-idf/components/log/include -IC:/Users/Jake/esp/esp-idf/components/soc/include -IC:/Users/Jake/esp/esp-idf/components/soc/esp32s3 -IC:/Users/Jake/esp/esp-idf/components/soc/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/hal/platform_port/include -IC:/Users/Jake/esp/esp-idf/components/hal/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/hal/include -IC:/Users/Jake/esp/esp-idf/components/esp_rom/include -IC:/Users/Jake/esp/esp-idf/components/esp_rom/include/esp32s3 -IC:/Users/Jake/esp/esp-idf/components/esp_rom/esp32s3 -IC:/Users/Jake/esp/esp-idf/components/esp_common/include -IC:/Users/Jake/esp/esp-idf/components/esp_system/include -IC:/Users/Jake/esp/esp-idf/components/esp_system/port/soc -IC:/Users/Jake/esp/esp-idf/components/esp_system/port/include/private -IC:/Users/Jake/esp/esp-idf/components/xtensa/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/xtensa/include -IC:/Users/Jake/esp/esp-idf/components/xtensa/deprecated_include -IC:/Users/Jake/esp/esp-idf/components/lwip/include -IC:/Users/Jake/esp/esp-idf/components/lwip/include/apps -IC:/Users/Jake/esp/esp-idf/components/lwip/include/apps/sntp -IC:/Users/Jake/esp/esp-idf/components/lwip/lwip/src/include -IC:/Users/Jake/esp/esp-idf/components/lwip/port/include -IC:/Users/Jake/esp/esp-idf/components/lwip/port/freertos/include -IC:/Users/Jake/esp/esp-idf/components/lwip/port/esp32xx/include -IC:/Users/Jake/esp/esp-idf/components/lwip/port/esp32xx/include/arch -IC:/Users/Jake/esp/esp-idf/components/lwip/port/esp32xx/include/sys -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/dotprod/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/support/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/support/mem/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/hann/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/blackman/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/blackman_harris/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/blackman_nuttall/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/nuttall/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/windows/flat_top/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/iir/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/fir/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/add/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/sub/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/mul/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/addc/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/mulc/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/math/sqrt/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/mul/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/add/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/addc/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/mulc/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/sub/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/fft/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/dct/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/conv/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/common/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/matrix/mul/test/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/kalman/ekf/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/espressif__esp-dsp/modules/kalman/ekf_imu13states/include -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/u8g2/csrc -IC:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/managed_components/u8g2-hal-esp-idf/include -IC:/Users/Jake/esp/esp-idf/components/driver/deprecated -IC:/Users/Jake/esp/esp-idf/components/driver/i2c/include -IC:/Users/Jake/esp/esp-idf/components/driver/touch_sensor/include -IC:/Users/Jake/esp/esp-idf/components/driver/twai/include -IC:/Users/Jake/esp/esp-idf/components/driver/touch_sensor/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/esp_pm/include -IC:/Users/Jake/esp/esp-idf/components/esp_ringbuf/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_gpio/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_pcnt/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_gptimer/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_spi/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_mcpwm/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_ana_cmpr/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_i2s/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_sdmmc/include -IC:/Users/Jake/esp/esp-idf/components/sdmmc/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_sdspi/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_sdio/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_dac/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_rmt/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_tsens/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_sdm/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_i2c/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_uart/include -IC:/Users/Jake/esp/esp-idf/components/vfs/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_ledc/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_parlio/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_usb_serial_jtag/include -IC:/Users/Jake/esp/esp-idf/components/mbedtls/port/include -IC:/Users/Jake/esp/esp-idf/components/mbedtls/mbedtls/include -IC:/Users/Jake/esp/esp-idf/components/mbedtls/mbedtls/library -IC:/Users/Jake/esp/esp-idf/components/mbedtls/esp_crt_bundle/include -IC:/Users/Jake/esp/esp-idf/components/mbedtls/mbedtls/3rdparty/everest/include -IC:/Users/Jake/esp/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m -IC:/Users/Jake/esp/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -IC:/Users/Jake/esp/esp-idf/components/esp_app_format/include -IC:/Users/Jake/esp/esp-idf/components/esp_bootloader_format/include -IC:/Users/Jake/esp/esp-idf/components/app_update/include -IC:/Users/Jake/esp/esp-idf/components/bootloader_support/include -IC:/Users/Jake/esp/esp-idf/components/bootloader_support/bootloader_flash/include -IC:/Users/Jake/esp/esp-idf/components/esp_partition/include -IC:/Users/Jake/esp/esp-idf/components/efuse/include -IC:/Users/Jake/esp/esp-idf/components/efuse/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/esp_mm/include -IC:/Users/Jake/esp/esp-idf/components/spi_flash/include -IC:/Users/Jake/esp/esp-idf/components/pthread/include -IC:/Users/Jake/esp/esp-idf/components/esp_timer/include -IC:/Users/Jake/esp/esp-idf/components/app_trace/include -IC:/Users/Jake/esp/esp-idf/components/esp_event/include -IC:/Users/Jake/esp/esp-idf/components/nvs_flash/include -IC:/Users/Jake/esp/esp-idf/components/esp_phy/include -IC:/Users/Jake/esp/esp-idf/components/esp_phy/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/esp_vfs_console/include -IC:/Users/Jake/esp/esp-idf/components/esp_netif/include -IC:/Users/Jake/esp/esp-idf/components/wpa_supplicant/include -IC:/Users/Jake/esp/esp-idf/components/wpa_supplicant/port/include -IC:/Users/Jake/esp/esp-idf/components/wpa_supplicant/esp_supplicant/include -IC:/Users/Jake/esp/esp-idf/components/esp_coex/include -IC:/Users/Jake/esp/esp-idf/components/esp_wifi/include -IC:/Users/Jake/esp/esp-idf/components/esp_wifi/wifi_apps/include -IC:/Users/Jake/esp/esp-idf/components/esp_wifi/wifi_apps/nan_app/include -IC:/Users/Jake/esp/esp-idf/components/esp_wifi/include/local -IC:/Users/Jake/esp/esp-idf/components/unity/include -IC:/Users/Jake/esp/esp-idf/components/unity/unity/src -IC:/Users/Jake/esp/esp-idf/components/cmock/CMock/src -IC:/Users/Jake/esp/esp-idf/components/console -IC:/Users/Jake/esp/esp-idf/components/http_parser -IC:/Users/Jake/esp/esp-idf/components/esp-tls -IC:/Users/Jake/esp/esp-idf/components/esp-tls/esp-tls-crypto -IC:/Users/Jake/esp/esp-idf/components/esp_adc/include -IC:/Users/Jake/esp/esp-idf/components/esp_adc/interface -IC:/Users/Jake/esp/esp-idf/components/esp_adc/esp32s3/include -IC:/Users/Jake/esp/esp-idf/components/esp_adc/deprecated/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_isp/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_cam/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_cam/interface -IC:/Users/Jake/esp/esp-idf/components/esp_driver_jpeg/include -IC:/Users/Jake/esp/esp-idf/components/esp_driver_ppa/include -IC:/Users/Jake/esp/esp-idf/components/esp_eth/include -IC:/Users/Jake/esp/esp-idf/components/esp_gdbstub/include -IC:/Users/Jake/esp/esp-idf/components/esp_hid/include -IC:/Users/Jake/esp/esp-idf/components/tcp_transport/include -IC:/Users/Jake/esp/esp-idf/components/esp_http_client/include -IC:/Users/Jake/esp/esp-idf/components/esp_http_server/include -IC:/Users/Jake/esp/esp-idf/components/esp_https_ota/include -IC:/Users/Jake/esp/esp-idf/components/esp_https_server/include -IC:/Users/Jake/esp/esp-idf/components/esp_psram/include -IC:/Users/Jake/esp/esp-idf/components/esp_lcd/include -IC:/Users/Jake/esp/esp-idf/components/esp_lcd/interface -IC:/Users/Jake/esp/esp-idf/components/esp_lcd/rgb/include -IC:/Users/Jake/esp/esp-idf/components/protobuf-c/protobuf-c -IC:/Users/Jake/esp/esp-idf/components/protocomm/include/common -IC:/Users/Jake/esp/esp-idf/components/protocomm/include/security -IC:/Users/Jake/esp/esp-idf/components/protocomm/include/transports -IC:/Users/Jake/esp/esp-idf/components/protocomm/include/crypto/srp6a -IC:/Users/Jake/esp/esp-idf/components/protocomm/proto-c -IC:/Users/Jake/esp/esp-idf/components/esp_local_ctrl/include -IC:/Users/Jake/esp/esp-idf/components/espcoredump/include -IC:/Users/Jake/esp/esp-idf/components/espcoredump/include/port/xtensa -IC:/Users/Jake/esp/esp-idf/components/wear_levelling/include -IC:/Users/Jake/esp/esp-idf/components/fatfs/diskio -IC:/Users/Jake/esp/esp-idf/components/fatfs/src -IC:/Users/Jake/esp/esp-idf/components/fatfs/vfs -IC:/Users/Jake/esp/esp-idf/components/idf_test/include -IC:/Users/Jake/esp/esp-idf/components/idf_test/include/esp32s3 -IC:/Users/Jake/esp/esp-idf/components/ieee802154/include -IC:/Users/Jake/esp/esp-idf/components/json/cJSON -IC:/Users/Jake/esp/esp-idf/components/mqtt/esp-mqtt/include -IC:/Users/Jake/esp/esp-idf/components/nvs_sec_provider/include -IC:/Users/Jake/esp/esp-idf/components/perfmon/include -IC:/Users/Jake/esp/esp-idf/components/spiffs/include -IC:/Users/Jake/esp/esp-idf/components/touch_element/include -IC:/Users/Jake/esp/esp-idf/components/usb/include -IC:/Users/Jake/esp/esp-idf/components/wifi_provisioning/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -Og -fno-shrink-wrap -fmacro-prefix-map=C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm=. -fmacro-prefix-map=C:/Users/Jake/esp/esp-idf=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu17 -Wno-old-style-declaration -fno-if-conversion -MD -MT esp-idf/main/CMakeFiles/__idf_main.dir/llm.c.obj -MF esp-idf\main\CMakeFiles\__idf_main.dir\llm.c.obj.d -o esp-idf/main/CMakeFiles/__idf_main.dir/llm.c.obj -c C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c: In function 'matmul_task':
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:300:11: warning: unused variable 'tName' [-Wunused-variable]
+  300 |     char *tName = pcTaskGetName(current_task);
+      |           ^~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:297:22: warning: unused variable 'xDelay' [-Wunused-variable]
+  297 |     const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
+      |                      ^~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c: In function 'forward_task':
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:326:11: warning: unused variable 'tName' [-Wunused-variable]
+  326 |     char *tName = pcTaskGetName(current_task);
+      |           ^~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:323:22: warning: unused variable 'xDelay' [-Wunused-variable]
+  323 |     const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
+      |                      ^~~~~~
+In file included from C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:17:
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c: In function 'build_sampler':
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 6 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:293:27: note: in expansion of macro 'LOG_COLOR'
+  293 | #define LOG_COLOR_E       LOG_COLOR(LOG_COLOR_RED)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_E'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:435:86: note: in expansion of macro 'LOG_FORMAT'
+  435 |         if (level==ESP_LOG_ERROR )          { esp_log_write(ESP_LOG_ERROR,      tag, LOG_FORMAT(E, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 7 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:293:27: note: in expansion of macro 'LOG_COLOR'
+  293 | #define LOG_COLOR_E       LOG_COLOR(LOG_COLOR_RED)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_E'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:435:86: note: in expansion of macro 'LOG_FORMAT'
+  435 |         if (level==ESP_LOG_ERROR )          { esp_log_write(ESP_LOG_ERROR,      tag, LOG_FORMAT(E, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 6 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:294:27: note: in expansion of macro 'LOG_COLOR'
+  294 | #define LOG_COLOR_W       LOG_COLOR(LOG_COLOR_BROWN)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_W'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:436:86: note: in expansion of macro 'LOG_FORMAT'
+  436 |         else if (level==ESP_LOG_WARN )      { esp_log_write(ESP_LOG_WARN,       tag, LOG_FORMAT(W, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 7 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:294:27: note: in expansion of macro 'LOG_COLOR'
+  294 | #define LOG_COLOR_W       LOG_COLOR(LOG_COLOR_BROWN)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_W'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:436:86: note: in expansion of macro 'LOG_FORMAT'
+  436 |         else if (level==ESP_LOG_WARN )      { esp_log_write(ESP_LOG_WARN,       tag, LOG_FORMAT(W, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:954:1: error: format '%lu' expects argument of type 'long unsigned int', but argument 6 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  954 |              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+      | ^          
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:59: note: in definition of macro 'LOG_FORMAT'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                                           ^~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:954:1: error: format '%lu' expects argument of type 'long unsigned int', but argument 7 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  954 |              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+      | ^          
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:59: note: in definition of macro 'LOG_FORMAT'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                                           ^~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:954:1: error: format '%lu' expects argument of type 'long unsigned int', but argument 6 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  954 |              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+      | ^          
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:59: note: in definition of macro 'LOG_FORMAT'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                                           ^~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:954:1: error: format '%lu' expects argument of type 'long unsigned int', but argument 7 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  954 |              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+      | ^          
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:59: note: in definition of macro 'LOG_FORMAT'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                                           ^~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 6 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:295:27: note: in expansion of macro 'LOG_COLOR'
+  295 | #define LOG_COLOR_I       LOG_COLOR(LOG_COLOR_GREEN)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_I'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:439:86: note: in expansion of macro 'LOG_FORMAT'
+  439 |         else                                { esp_log_write(ESP_LOG_INFO,       tag, LOG_FORMAT(I, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:290:27: error: format '%lu' expects argument of type 'long unsigned int', but argument 7 has type 'size_t' {aka 'unsigned int'} [-Werror=format=]
+  290 | #define LOG_COLOR(COLOR)  "\033[0;" COLOR "m"
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:295:27: note: in expansion of macro 'LOG_COLOR'
+  295 | #define LOG_COLOR_I       LOG_COLOR(LOG_COLOR_GREEN)
+      |                           ^~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:307:37: note: in expansion of macro 'LOG_COLOR_I'
+  307 | #define LOG_FORMAT(letter, format)  LOG_COLOR_ ## letter #letter " (%" PRIu32 ") %s: " format LOG_RESET_COLOR "\n"
+      |                                     ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:439:86: note: in expansion of macro 'LOG_FORMAT'
+  439 |         else                                { esp_log_write(ESP_LOG_INFO,       tag, LOG_FORMAT(I, format), esp_log_timestamp(), tag, ##__VA_ARGS__); } \
+      |                                                                                      ^~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:463:41: note: in expansion of macro 'ESP_LOG_LEVEL'
+  463 |         if ( LOG_LOCAL_LEVEL >= level ) ESP_LOG_LEVEL(level, tag, format, ##__VA_ARGS__); \
+      |                                         ^~~~~~~~~~~~~
+C:/Users/Jake/esp/esp-idf/components/log/include/esp_log.h:367:38: note: in expansion of macro 'ESP_LOG_LEVEL_LOCAL'
+  367 | #define ESP_LOGI( tag, format, ... ) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+      |                                      ^~~~~~~~~~~~~~~~~~~
+C:/Users/Jake/Documents/GitHub/ROCK/esp32-llm/main/llm.c:952:5: note: in expansion of macro 'ESP_LOGI'
+  952 |     ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%lu psram=%lu",
+      |     ^~~~~~~~
+cc1.exe: some warnings being treated as errors
+ninja: build stopped: subcommand failed.

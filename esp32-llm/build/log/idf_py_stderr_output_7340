@@ -1,0 +1,3 @@
+info: INFO: Symbol IDF_TARGET_LINUX defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    C:\Users\Jake\esp\esp-idf\Kconfig:162
+    C:\Users\Jake\esp\esp-idf\Kconfig:78

@@ -18,6 +18,7 @@
 #include "esp_system.h"
 #include "esp_dsp.h"
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 
 #define MAP_FAILED NULL
 #define munmap(ptr, length) custom_munmap(ptr)
@@ -179,28 +180,31 @@ void read_checkpoint(char *checkpoint, Config *config, TransformerWeights *weigh
     // figure out the file size
     fseek(file, 0, SEEK_END); // move file pointer to end of file
     *file_size = ftell(file); // get the file size, in bytes
-    fseek(file, 0, SEEK_SET); // move back to beginning for reading
+    fseek(file, sizeof(Config), SEEK_SET); // position past Config header so fread gets only weights
     ESP_LOGI(TAG, "File size: %zu bytes", *file_size);
     ESP_LOGI(TAG, "Free ram available: %lu", esp_get_free_heap_size());
-    *data = malloc(*file_size);
+    // Allocate only the weights (file minus Config header), with 8-byte alignment
+    // required by the ESP-DSP SIMD AE_L32X2F_I loads in dsps_dotprod_f32_ae32.
+    size_t weights_size = *file_size - sizeof(Config);
+    *data = heap_caps_aligned_alloc(8, weights_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (*data == NULL)
     {
-        ESP_LOGE(TAG, "Malloc operation failed");
+        ESP_LOGE(TAG, "Malloc operation failed (need %u bytes PSRAM)", (unsigned)weights_size);
         exit(EXIT_FAILURE);
     }
-    // Read the entire file into memory
-    size_t bytes_read = fread(*data, 1, *file_size, file);
-    if (bytes_read != *file_size)
+    // File is already positioned past Config (fread above advanced it)
+    size_t bytes_read = fread(*data, 1, weights_size, file);
+    if (bytes_read != weights_size)
     {
-        ESP_LOGE(TAG, "Failed to read file into memory");
-        ESP_LOGE(TAG, "Bytes read %zu bytes", bytes_read);
+        ESP_LOGE(TAG, "Failed to read weights: got %u of %u bytes", (unsigned)bytes_read, (unsigned)weights_size);
         exit(EXIT_FAILURE);
     }
     fclose(file);
 
     ESP_LOGI(TAG, "Successfully read LLM into memory");
     ESP_LOGI(TAG, "Free ram available: %lu", esp_get_free_heap_size());
-    v4sf *weights_ptr = *data + sizeof(Config) / sizeof(v4sf);
+    // weights_ptr = *data directly (8-byte aligned, no Config offset needed)
+    v4sf *weights_ptr = *data;
     memory_map_weights(weights, config, weights_ptr, shared_weights);
     ESP_LOGI(TAG, "Successfully read checkpoint");
 }
@@ -423,8 +427,11 @@ v4sf *forward(Transformer *transformer, int token, int pos)
 
     // copy the token embedding into x
     v4sf *content_row = w->token_embedding_table + token * dim;
-    ESP_LOGD(TAG, "Content row: %f", *content_row);
     memcpy(x, content_row, dim * sizeof(*x));
+    if (pos == 0) {
+        ESP_LOGI(TAG, "DBG emb[0]=%f emb[1]=%f emb[2]=%f (addr=%p tok=%d)",
+                 x[0], x[1], x[2], (void*)content_row, token);
+    }
 
     // forward all the layers
     for (unsigned long long l = 0; l < p->n_layers; l++)
@@ -911,6 +918,7 @@ int sample_topp(v4sf *probabilities, int n, v4sf topp, ProbIndex *probindex, v4s
             n0++;
         }
     }
+    if (n0 == 0) { return sample_argmax(probabilities, n); }
     qsort(probindex, n0, sizeof(ProbIndex), compare);
 
     // truncate the list where cumulative probability exceeds topp
@@ -947,7 +955,14 @@ void build_sampler(Sampler *sampler, int vocab_size, v4sf temperature, v4sf topp
     sampler->topp = topp;
     sampler->rng_state = rng_seed;
     // buffer only used with nucleus sampling; may not need but it's ~small
-    sampler->probindex = malloc(sampler->vocab_size * sizeof(ProbIndex));
+    ESP_LOGI(TAG, "Free heap before probindex alloc: internal=%u psram=%u",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    sampler->probindex = heap_caps_malloc(sampler->vocab_size * sizeof(ProbIndex), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (sampler->probindex == NULL) {
+        sampler->probindex = malloc(sampler->vocab_size * sizeof(ProbIndex));
+    }
+    ESP_LOGI(TAG, "probindex=%p", sampler->probindex);
     ESP_LOGI(TAG, "Sampler Successfully built");
 }
 
@@ -973,10 +988,17 @@ int sample(Sampler *sampler, v4sf *logits)
 {
     // sample the token given the logits and some hyperparameters
     int next;
+    static int sc = 0;
+    if (sc++ < 2) {
+        uint32_t *w = (uint32_t*)sampler;
+        ESP_LOGI(TAG, "SAMPLE: raw=%08X %08X %08X %08X %08X %08X temp=%f topp=%f",
+                 w[0], w[1], w[2], w[3], w[4], w[5], sampler->temperature, sampler->topp);
+    }
     if (sampler->temperature == 0.0f)
     {
         // greedy argmax sampling: take the token with the highest probability
         next = sample_argmax(logits, sampler->vocab_size);
+        if (sc <= 3) ESP_LOGI(TAG, "ARGMAX RET=%d logits[next]=%f", next, logits[next]);
     }
     else
     {
@@ -990,7 +1012,7 @@ int sample(Sampler *sampler, v4sf *logits)
         // flip a (v4sf) coin (this is our source of entropy for sampling)
         v4sf coin = random_f32(&sampler->rng_state);
         // we sample from this distribution to get the next token
-        if (sampler->topp <= 0 || sampler->topp >= 1)
+        if (sampler->topp <= 0 || sampler->topp >= 1 || sampler->probindex == NULL)
         {
             // simply sample from the predicted probability distribution
             next = sample_mult(logits, sampler->vocab_size, coin);
@@ -1055,7 +1077,19 @@ void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, 
         else
         {
             // otherwise sample the next token from the logits
+            if (pos == 0) {
+                int max_i = 0;
+                v4sf max_v = logits[0];
+                for (int qi = 1; qi < sampler->vocab_size; qi++) {
+                    if (logits[qi] > max_v) { max_v = logits[qi]; max_i = qi; }
+                }
+                ESP_LOGI(TAG, "DBG inline_argmax=%d val=%f logits[0]=%f [1]=%f addr=%p", max_i, max_v, logits[0], logits[1], (void*)logits);
+                ESP_LOGI(TAG, "DBG sampler: temp=%f topp=%f vocab=%d addr=%p", sampler->temperature, sampler->topp, sampler->vocab_size, (void*)sampler);
+            }
             next = sample(sampler, logits);
+            if (pos <= 1) {
+                ESP_LOGI(TAG, "DBG sampled next=%d", next);
+            }
         }
         pos++;
 

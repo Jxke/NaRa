@@ -14,6 +14,7 @@
 
 static const char *TAG = "MAIN";
 u8g2_t u8g2;
+static bool display_ok = false;
 
 #define PIN_SDA 8
 #define PIN_SCL 9
@@ -21,7 +22,8 @@ u8g2_t u8g2;
 
 /**
  * @brief Configure SSD1306 display
- * Uses I2C connection
+ * Probes I2C first — if no display is connected, sets display_ok=false
+ * and continues in serial-only mode instead of crashing.
  */
 void init_display(void)
 {
@@ -31,17 +33,29 @@ void init_display(void)
     u8g2_esp32_hal_init(u8g2_esp32_hal);
     u8g2_Setup_ssd1306_i2c_128x64_noname_f(
         &u8g2, U8G2_R0,
-        // u8x8_byte_sw_i2c,
         u8g2_esp32_i2c_byte_cb,
-        u8g2_esp32_gpio_and_delay_cb); // init u8g2 structure
-    // 0x3c
+        u8g2_esp32_gpio_and_delay_cb);
     u8x8_SetI2CAddress(&u8g2.u8x8, OLED_I2C_ADDRESS);
-    u8g2_InitDisplay(&u8g2);     // send init sequence to the display, display is in
-                                 // sleep mode after this,
-    u8g2_SetPowerSave(&u8g2, 0); // wake up display
+
+    // Probe I2C before initialising — skip display if nothing responds
+    i2c_cmd_handle_t probe = i2c_cmd_link_create();
+    i2c_master_start(probe);
+    i2c_master_write_byte(probe, OLED_I2C_ADDRESS | I2C_MASTER_WRITE, true);
+    i2c_master_stop(probe);
+    esp_err_t probe_ret = i2c_master_cmd_begin(I2C_NUM_0, probe, pdMS_TO_TICKS(50));
+    i2c_cmd_link_delete(probe);
+
+    if (probe_ret != ESP_OK) {
+        ESP_LOGW(TAG, "No OLED found (SDA=%d SCL=%d) — serial-only mode", PIN_SDA, PIN_SCL);
+        return;
+    }
+
+    u8g2_InitDisplay(&u8g2);
+    u8g2_SetPowerSave(&u8g2, 0);
     u8g2_ClearBuffer(&u8g2);
     u8g2_SetFont(&u8g2, u8g2_font_ncenB08_tr);
     u8g2_SendBuffer(&u8g2);
+    display_ok = true;
     ESP_LOGI(TAG, "Display initialized");
 }
 
@@ -98,6 +112,8 @@ void init_storage(void)
  */
 void write_display(char *text)
 {
+    ESP_LOGI(TAG, "%s", text);
+    if (!display_ok) return;
     u8g2_ClearBuffer(&u8g2);
     u8g2_DrawStr(&u8g2, 0, u8g2_GetDisplayHeight(&u8g2) / 2, text);
     u8g2_SendBuffer(&u8g2);
@@ -121,6 +137,7 @@ void generate_complete_cb(float tk_s)
  */
 void draw_llama(void)
 {
+    if (!display_ok) return;
     u8g2_DrawXBM(&u8g2, 0, 0, u8g2_GetDisplayWidth(&u8g2), u8g2_GetDisplayHeight(&u8g2), &llama_bmp);
     u8g2_SendBuffer(&u8g2);
 }
@@ -134,7 +151,7 @@ void app_main(void)
     // default parameters
     char *checkpoint_path = "/data/stories260K.bin"; // e.g. out/model.bin
     char *tokenizer_path = "/data/tok512.bin";
-    float temperature = 1.0f;        // 0.0 = greedy deterministic. 1.0 = original. don't set higher
+    float temperature = 0.0f;        // TEMP: 0=greedy to test sampling
     float topp = 0.9f;               // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
     int steps = 256;                 // number of steps to run for
     char *prompt = NULL;             // prompt string
