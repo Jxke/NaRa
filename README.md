@@ -1,108 +1,93 @@
 # ROCK
 
-Arduino UNO Q project — animated display, IMU-driven googly eyes, and an Ambient AI voice assistant running on the Debian side.
+This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` and vendors the upstream `DAZI-AI` Arduino library directly into this repo.
 
-## Hardware
+The previous UNO Q / Debian-side ambient AI setup is obsolete here and has been replaced with a pure ESP32-S3 Arduino flow:
 
-| Component | Interface | Pins |
-|-----------|-----------|------|
-| GC9A01 Round Display (240×240) | SPI | SCK=13, MOSI=11, DC=10, CS=9, RST=8 |
-| MPU-6050 IMU | I2C | SDA, SCL |
-| AHT20 Temp/Humidity Sensor | I2C | SDA, SCL |
-| Talk Button | GPIO | D2 (active low, internal pull-up) |
+- `DAZI-AI/`
+  DAZI voice-assistant library imported from `https://github.com/zenhall/DAZI-AI`
+- `ROCK/ROCK.ino`
+  Main sketch adapted for this board
+- `scripts/flash.ps1`
+  Arduino CLI build and upload helper
 
-## Structure
+## Target Board
 
-```
-ROCK/
-├── ROCK/                   ← main Arduino sketch
-│   └── ROCK.ino
-├── ambient_ai/             ← Debian-side Python pipeline
-│   ├── main.py                 Entry point
-│   ├── stt.py                  Speech-to-text (Whisper)
-│   ├── llm.py                  LLM inference
-│   ├── tts.py                  Text-to-speech
-│   ├── context.py              Context assembly
-│   ├── db.py                   Sensor/context database
-│   ├── emoji_map.py            Emotion → emoji mapping
-│   ├── send_emoji.py           Send emoji to display via Bridge RPC
-│   ├── system_prompt.txt       LLM system prompt
-│   └── schema.md               Arduino ↔ Linux communication schema
-└── Sensor test/            ← test sketches
-    ├── Sensor test.ino         AHT20 temperature & humidity reader
-    ├── AHT20Test/              AHT20 standalone test
-    ├── Blink/                  Basic LED blink
-    └── Test/                   Display wiring verification (red screen)
-```
+- Arduino FQBN base: `esp32:esp32:esp32s3`
+- Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
+- Serial port detected during integration: `COM6`
 
-## Arduino Sketch (ROCK.ino)
+## Wiring
 
-Animated googly eyes on the GC9A01 circular display, driven by the MPU-6050 IMU. Tilt the board to move the pupils. Communicates with the Debian side via the Arduino Router Bridge.
+This sketch assumes external I2S audio hardware:
 
-**Libraries:** Adafruit GC9A01A, Adafruit GFX, Adafruit MPU6050, Adafruit AHTX0, Adafruit Unified Sensor, Arduino_RouterBridge, MsgPack
+- INMP441 microphone
+  - `SCK -> GPIO5`
+  - `WS -> GPIO4`
+  - `SD -> GPIO6`
+  - `L/R -> GND`
+  - `VDD -> 3.3V`
+  - `GND -> GND`
+- MAX98357A speaker amp
+  - `BCLK -> GPIO48`
+  - `LRC -> GPIO45`
+  - `DIN -> GPIO47`
+  - `VIN -> 5V or board speaker supply`
+  - `GND -> GND`
+- Start/stop button
+  - Uses onboard `BOOT` button on `GPIO0`
 
-**How it works:**
-- Accelerometer axes smoothed with exponential moving average (α=0.6) to simulate googly eye physics
-- IMU bias auto-calibrated at startup — pupils centre correctly regardless of board mounting angle
-- Each eye rendered into a 111×111 pixel RAM framebuffer and pushed via single `drawRGBBitmap` call, eliminating scan line artifacts
+If your mic or speaker is wired to different pins, update the constants at the top of [ROCK.ino](/c:/Users/Jake/Documents/GitHub/ROCK/ROCK/ROCK.ino).
 
-**Ambient AI integration:**
-- `TEMP:<val>` and `HUM:<val>` sent via `Monitor` every second
-- Button on D2 (active low): hold → `MIC:START`, release → `MIC:STOP`
-- `show_emoji(bytes)` RPC: receives 40×40 RGB565 bitmap, renders in pupils (IMU frozen) for 10 seconds
-- `clear_emoji()` RPC: returns to googly eyes
+## Build
 
-## Ambient AI Pipeline (ambient_ai/)
-
-Runs on the Arduino UNO Q's Debian side. Listens for `MIC:START`/`MIC:STOP` from the MCU, records audio, transcribes with Whisper, queries an LLM, and sends an emoji response back to the display.
-
-See [`ambient_ai/schema.md`](ambient_ai/schema.md) for the full Arduino ↔ Linux communication spec.
-
-## Uploading the Sketch
-
-The board connects over WiFi or USB. The sketch is also auto-flashed on boot via `eyes-sketch.service` on the Debian side.
-
-### From Debian side (on-board)
-```bash
-cd /home/arduino/ROCK && git pull
-systemctl start eyes-sketch
+```powershell
+./scripts/flash.ps1
 ```
 
-### Over WiFi (from Mac)
-```bash
-REMOTEOCD=~/Library/Arduino15/packages/arduino/tools/remoteocd/0.0.4-rc.4/remoteocd
-VARIANT=~/Library/Arduino15/packages/arduino/hardware/zephyr/0.53.1/variants/arduino_uno_q_stm32u585xx
+## Upload
 
-arduino-cli compile --fqbn arduino:zephyr:unoq --build-path /tmp/build ROCK/
-
-"$REMOTEOCD" upload \
-  -a <board-ip> \
-  --password "12345678" \
-  -f "$VARIANT/flash_sketch.cfg" \
-  /tmp/build/ROCK.ino.elf-zsk.bin
+```powershell
+./scripts/flash.ps1 -Upload
 ```
 
-### Over USB (from Mac)
-```bash
-REMOTEOCD=~/Library/Arduino15/packages/arduino/tools/remoteocd/0.0.4-rc.4/remoteocd
-ADB=~/Library/Arduino15/packages/arduino/tools/adb/32.0.0/adb
-VARIANT=~/Library/Arduino15/packages/arduino/hardware/zephyr/0.53.1/variants/arduino_uno_q_stm32u585xx
+If your board is not on `COM6`, pass the correct port:
 
-arduino-cli compile --fqbn arduino:zephyr:unoq --build-path /tmp/build ROCK/
-
-"$REMOTEOCD" upload \
-  --adb-path "$ADB" \
-  -s "693293613" \
-  -f "$VARIANT/flash_sketch.cfg" \
-  /tmp/build/ROCK.ino.elf-zsk.bin
+```powershell
+./scripts/flash.ps1 -Upload -Port COM7
 ```
 
-> **Note:** Always upload the `.elf-zsk.bin` file (not `.bin`) — this is the correct binary format for Zephyr's dynamic link mode on the UNO Q.
+## Runtime Configuration
 
-## Board Info
+Secrets are not hardcoded. On first boot, open a serial monitor at `115200`, send one JSON line, then press `BOOT`.
 
-- **FQBN:** `arduino:zephyr:unoq`
-- **Core:** `arduino:zephyr` v0.53.1
-- **Serial number:** `693293613`
-- **Network hostname:** `rock.local`
-- **Debian repo:** `/home/arduino/ROCK/` → `git@github.com:Jxke/ROCK.git`
+Free mode example:
+
+```json
+{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","subscription":"free","asr_api_key":"YOUR_VOLCENGINE_ASR_KEY","asr_cluster":"volcengine_input_en","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","system_prompt":"You are a concise voice assistant."}
+```
+
+Pro mode example:
+
+```json
+{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","subscription":"pro","asr_api_key":"YOUR_VOLCENGINE_ASR_KEY","asr_cluster":"volcengine_input_en","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","system_prompt":"You are a concise voice assistant.","minimax_apiKey":"YOUR_MINIMAX_KEY","minimax_groupId":"YOUR_GROUP_ID","tts_voice_id":"female-tianmei","tts_speed":1.0,"tts_volume":1.0,"tts_model":"speech-2.6-hd","tts_audio_format":"mp3","tts_sample_rate":16000,"tts_bitrate":32000}
+```
+
+The sketch saves that config into `Preferences`, so you only need to resend it when you want to change credentials or prompts.
+
+## Arduino CLI Dependencies
+
+Installed during integration:
+
+- `esp32:esp32`
+- `ArduinoJson`
+- `ArduinoWebsockets`
+- `Seeed_Arduino_mbedtls`
+
+## Current Status
+
+- DAZI-AI imported into the repo
+- Main ESP32-S3 sketch added
+- Arduino CLI build/upload helper added
+- Old README replaced
+- `esp32-llm` removal attempted; only a stale locked build-log residue may remain if Windows still has the old directory open

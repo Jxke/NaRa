@@ -2,3 +2,4 @@ ambient_ai/venv/
 ambient_ai/__pycache__/
 **/__pycache__/
 *.pyc
+build/
