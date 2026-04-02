@@ -1,519 +1,663 @@
 #include <WiFi.h>
-#include <ArduinoASRChat.h>
-#include <ArduinoGPTChat.h>
-#include <ArduinoTTSChat.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
-#include "Audio.h"
-
-Audio audio;
+#include <ESP_I2S.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <GxEPD2_BW.h>
+#include <Fonts/FreeMonoBold9pt7b.h>
+#include <Adafruit_DRV2605.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include "esp_heap_caps.h"
 
 namespace {
 
-constexpr int I2S_DOUT = 47;
-constexpr int I2S_BCLK = 48;
-constexpr int I2S_LRC = 45;
-
-constexpr int I2S_MIC_SERIAL_CLOCK = 5;
-constexpr int I2S_MIC_LEFT_RIGHT_CLOCK = 4;
-constexpr int I2S_MIC_SERIAL_DATA = 6;
-
-constexpr int BOOT_BUTTON_PIN = 0;
-constexpr int SAMPLE_RATE = 16000;
-
-constexpr char CONFIG_NAMESPACE[] = "voice_config";
-constexpr char DEFAULT_ASR_CLUSTER[] = "volcengine_input_en";
+constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
 constexpr char DEFAULT_OPENAI_BASE_URL[] = "https://api.openai.com";
+constexpr char DEFAULT_OPENAI_MODEL[] = "gpt-4.1-nano";
+constexpr char DEFAULT_DEEPGRAM_MODEL[] = "nova-2-general";
+constexpr char DEFAULT_DEEPGRAM_LANGUAGE[] = "en-US";
 constexpr char DEFAULT_SYSTEM_PROMPT[] =
-  "You are a concise voice assistant running on an ESP32-S3. "
-  "Keep replies brief, clear, and natural for spoken playback.";
-constexpr char DEFAULT_TTS_VOICE_ID[] = "female-tianmei";
-constexpr char DEFAULT_TTS_MODEL[] = "speech-2.6-hd";
-constexpr char DEFAULT_TTS_AUDIO_FORMAT[] = "mp3";
+  "You are a concise embedded assistant. Answer clearly and briefly.";
 
-String wifi_ssid;
-String wifi_password;
-String subscription = "free";
-String asr_api_key;
-String asr_cluster = DEFAULT_ASR_CLUSTER;
-String openai_apiKey;
-String openai_apiBaseUrl = DEFAULT_OPENAI_BASE_URL;
-String system_prompt = DEFAULT_SYSTEM_PROMPT;
-String minimax_apiKey;
-String minimax_groupId;
-String tts_voice_id = DEFAULT_TTS_VOICE_ID;
-float tts_speed = 1.0f;
-float tts_volume = 1.0f;
-String tts_model = DEFAULT_TTS_MODEL;
-String tts_audio_format = DEFAULT_TTS_AUDIO_FORMAT;
-int tts_sample_rate = 16000;
-int tts_bitrate = 32000;
+constexpr int BUTTON_PIN = 2;
+constexpr int POT_PIN = 8;
+
+constexpr int MIC_WS_PIN = 4;
+constexpr int MIC_SCK_PIN = 5;
+constexpr int MIC_SD_PIN = 6;
+
+constexpr int EINK_BUSY_PIN = 9;
+constexpr int EINK_CS_PIN = 10;
+constexpr int EINK_DIN_PIN = 11;
+constexpr int EINK_CLK_PIN = 12;
+constexpr int EINK_DC_PIN = 13;
+constexpr int EINK_RST_PIN = 14;
+
+constexpr int I2C_SDA_PIN = 38;
+constexpr int I2C_SCL_PIN = 39;
+
+constexpr uint32_t SAMPLE_RATE = 16000;
+constexpr uint16_t WAV_HEADER_SIZE = 44;
+constexpr uint32_t MAX_RECORD_SECONDS = 10;
+constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;
+constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
+
+constexpr uint32_t STATUS_PARTIAL_X = 0;
+constexpr uint32_t STATUS_PARTIAL_Y = 0;
+constexpr uint32_t STATUS_PARTIAL_W = 200;
+constexpr uint32_t STATUS_PARTIAL_H = 32;
+
+SPIClass einkSpi(FSPI);
+GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
+  GxEPD2_154_D67(EINK_CS_PIN, EINK_DC_PIN, EINK_RST_PIN, EINK_BUSY_PIN));
+
+Preferences preferences;
+I2SClass microphoneI2S;
+Adafruit_DRV2605 drv;
+Adafruit_MPU6050 mpu;
+
+String wifiSsid;
+String wifiPassword;
+String deepgramApiKey;
+String openaiApiKey;
+String openaiApiBaseUrl = DEFAULT_OPENAI_BASE_URL;
+String openaiModel = DEFAULT_OPENAI_MODEL;
+String deepgramModel = DEFAULT_DEEPGRAM_MODEL;
+String deepgramLanguage = DEFAULT_DEEPGRAM_LANGUAGE;
+String systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
 bool configReceived = false;
-bool systemInitialized = false;
-bool ttsCompleted = false;
+bool wifiConnected = false;
+bool displayReady = false;
+bool drvReady = false;
+bool mpuReady = false;
+bool recording = false;
+bool buttonWasPressed = false;
 
-ArduinoASRChat* asrChat = nullptr;
-ArduinoGPTChat* gptChat = nullptr;
-ArduinoTTSChat* ttsChat = nullptr;
-Preferences preferences;
+uint8_t* audioBuffer = nullptr;
+size_t recordedBytes = 0;
+unsigned long recordStartMs = 0;
 
-enum ConversationState {
+String statusLine = "BOOT";
+String captionUser;
+String captionAssistant;
+String serialLineBuffer;
+
+enum AppState {
   STATE_WAITING_CONFIG,
   STATE_IDLE,
-  STATE_LISTENING,
-  STATE_PROCESSING_LLM,
-  STATE_PLAYING_TTS,
-  STATE_WAIT_TTS_COMPLETE
+  STATE_RECORDING,
+  STATE_TRANSCRIBING,
+  STATE_THINKING,
+  STATE_SHOWING_RESULT,
+  STATE_ERROR
 };
 
-ConversationState currentState = STATE_WAITING_CONFIG;
-bool continuousMode = false;
-bool buttonPressed = false;
-bool wasButtonPressed = false;
-unsigned long ttsStartTime = 0;
-unsigned long ttsCheckTime = 0;
+AppState appState = STATE_WAITING_CONFIG;
 
-void onTTSComplete();
-void onTTSError(const char* error);
-void stopContinuousMode();
-void startContinuousMode();
-void handleASRResult();
-
-void printConfigTemplate() {
-  Serial.println();
-  Serial.println("Send a single-line JSON document over Serial, then press BOOT.");
-  Serial.println(
-    "{\"wifi_ssid\":\"YOUR_WIFI\",\"wifi_password\":\"YOUR_WIFI_PASSWORD\","
-    "\"subscription\":\"free\",\"asr_api_key\":\"YOUR_VOLCENGINE_ASR_KEY\","
-    "\"asr_cluster\":\"volcengine_input_en\",\"openai_apiKey\":\"YOUR_OPENAI_KEY\","
-    "\"openai_apiBaseUrl\":\"https://api.openai.com\","
-    "\"system_prompt\":\"You are a concise voice assistant.\"}");
-  Serial.println();
-  Serial.println("Optional pro fields:");
-  Serial.println(
-    "{\"minimax_apiKey\":\"YOUR_MINIMAX_KEY\",\"minimax_groupId\":\"YOUR_GROUP_ID\","
-    "\"tts_voice_id\":\"female-tianmei\",\"tts_speed\":1.0,\"tts_volume\":1.0,"
-    "\"tts_model\":\"speech-2.6-hd\",\"tts_audio_format\":\"mp3\","
-    "\"tts_sample_rate\":16000,\"tts_bitrate\":32000}");
-  Serial.println();
+void buzz(uint8_t effect = 1) {
+  if (!drvReady) return;
+  drv.setWaveform(0, effect);
+  drv.setWaveform(1, 0);
+  drv.go();
 }
 
-bool saveConfigToFlash() {
+String truncateForDisplay(const String& input, size_t maxLen) {
+  if (input.length() <= maxLen) return input;
+  if (maxLen < 4) return input.substring(0, maxLen);
+  return input.substring(0, maxLen - 3) + "...";
+}
+
+int responseWordLimit() {
+  const int raw = analogRead(POT_PIN);
+  return map(raw, 0, 4095, 12, 80);
+}
+
+String dynamicPrompt() {
+  String prompt = systemPrompt;
+  prompt += " Keep the reply under ";
+  prompt += String(responseWordLimit());
+  prompt += " words.";
+  return prompt;
+}
+
+void drawWrappedText(const String& text, int16_t x, int16_t y, int16_t maxWidth, int16_t lineHeight, int maxLines) {
+  String remaining = text;
+  for (int line = 0; line < maxLines && remaining.length() > 0; ++line) {
+    int split = remaining.length();
+    while (split > 0) {
+      String candidate = remaining.substring(0, split);
+      int16_t x1, y1;
+      uint16_t w, h;
+      display.getTextBounds(candidate, x, y, &x1, &y1, &w, &h);
+      if (w <= maxWidth) break;
+      split = remaining.lastIndexOf(' ', split - 1);
+      if (split <= 0) {
+        split = min<int>(remaining.length(), 18);
+        break;
+      }
+    }
+    String lineText = remaining.substring(0, split);
+    lineText.trim();
+    if (line == maxLines - 1 && split < remaining.length()) {
+      lineText = truncateForDisplay(lineText + " " + remaining.substring(split), 28);
+    }
+    display.setCursor(x, y + line * lineHeight);
+    display.print(lineText);
+    remaining = remaining.substring(split);
+    remaining.trim();
+  }
+}
+
+void fullRender() {
+  if (!displayReady) return;
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(8, 18);
+    display.print("ROCK");
+
+    display.drawLine(0, 26, 199, 26, GxEPD_BLACK);
+
+    display.setCursor(8, 50);
+    display.print(statusLine);
+
+    display.setCursor(8, 74);
+    display.print("WiFi:");
+    display.print(wifiConnected ? "OK" : "OFF");
+
+    display.setCursor(110, 74);
+    display.print("POT:");
+    display.print(responseWordLimit());
+
+    display.setCursor(8, 98);
+    display.print("USER");
+    drawWrappedText(captionUser, 8, 118, 184, 18, 3);
+
+    display.setCursor(8, 170);
+    display.print("AI");
+    drawWrappedText(captionAssistant, 8, 190, 184, 18, 1);
+  } while (display.nextPage());
+}
+
+void renderStatusOnly() {
+  if (!displayReady) return;
+
+  display.setPartialWindow(0, 0, 200, 32);
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(8, 22);
+    display.print(truncateForDisplay(statusLine, 16));
+  } while (display.nextPage());
+}
+
+void updateScreen(const String& newStatus, const String& userText = "", const String& assistantText = "", bool full = false) {
+  statusLine = newStatus;
+  if (userText.length()) captionUser = userText;
+  if (assistantText.length()) captionAssistant = assistantText;
+  if (full) fullRender();
+  else renderStatusOnly();
+}
+
+void saveConfig() {
   preferences.begin(CONFIG_NAMESPACE, false);
-  preferences.putString("wifi_ssid", wifi_ssid);
-  preferences.putString("wifi_pass", wifi_password);
-  preferences.putString("subscription", subscription);
-  preferences.putString("asr_key", asr_api_key);
-  preferences.putString("asr_cluster", asr_cluster);
-  preferences.putString("openai_key", openai_apiKey);
-  preferences.putString("openai_url", openai_apiBaseUrl);
-  preferences.putString("sys_prompt", system_prompt);
-  preferences.putString("minimax_key", minimax_apiKey);
-  preferences.putString("minimax_gid", minimax_groupId);
-  preferences.putString("tts_voice", tts_voice_id);
-  preferences.putFloat("tts_speed", tts_speed);
-  preferences.putFloat("tts_volume", tts_volume);
-  preferences.putString("tts_model", tts_model);
-  preferences.putString("tts_format", tts_audio_format);
-  preferences.putInt("tts_sample", tts_sample_rate);
-  preferences.putInt("tts_bitrate", tts_bitrate);
+  preferences.putString("wifi_ssid", wifiSsid);
+  preferences.putString("wifi_pass", wifiPassword);
+  preferences.putString("deepgram_key", deepgramApiKey);
+  preferences.putString("openai_key", openaiApiKey);
+  preferences.putString("openai_url", openaiApiBaseUrl);
+  preferences.putString("openai_model", openaiModel);
+  preferences.putString("dg_model", deepgramModel);
+  preferences.putString("dg_lang", deepgramLanguage);
+  preferences.putString("sys_prompt", systemPrompt);
   preferences.putBool("configured", true);
   preferences.end();
-  Serial.println("[Flash] Configuration saved");
-  return true;
 }
 
-bool loadConfigFromFlash() {
+bool loadConfig() {
   preferences.begin(CONFIG_NAMESPACE, true);
   const bool configured = preferences.getBool("configured", false);
   if (!configured) {
     preferences.end();
-    Serial.println("[Flash] No saved configuration");
     return false;
   }
-
-  wifi_ssid = preferences.getString("wifi_ssid", "");
-  wifi_password = preferences.getString("wifi_pass", "");
-  subscription = preferences.getString("subscription", "free");
-  asr_api_key = preferences.getString("asr_key", "");
-  asr_cluster = preferences.getString("asr_cluster", DEFAULT_ASR_CLUSTER);
-  openai_apiKey = preferences.getString("openai_key", "");
-  openai_apiBaseUrl = preferences.getString("openai_url", DEFAULT_OPENAI_BASE_URL);
-  system_prompt = preferences.getString("sys_prompt", DEFAULT_SYSTEM_PROMPT);
-  minimax_apiKey = preferences.getString("minimax_key", "");
-  minimax_groupId = preferences.getString("minimax_gid", "");
-  tts_voice_id = preferences.getString("tts_voice", DEFAULT_TTS_VOICE_ID);
-  tts_speed = preferences.getFloat("tts_speed", 1.0f);
-  tts_volume = preferences.getFloat("tts_volume", 1.0f);
-  tts_model = preferences.getString("tts_model", DEFAULT_TTS_MODEL);
-  tts_audio_format = preferences.getString("tts_format", DEFAULT_TTS_AUDIO_FORMAT);
-  tts_sample_rate = preferences.getInt("tts_sample", 16000);
-  tts_bitrate = preferences.getInt("tts_bitrate", 32000);
+  wifiSsid = preferences.getString("wifi_ssid", "");
+  wifiPassword = preferences.getString("wifi_pass", "");
+  deepgramApiKey = preferences.getString("deepgram_key", "");
+  openaiApiKey = preferences.getString("openai_key", "");
+  openaiApiBaseUrl = preferences.getString("openai_url", DEFAULT_OPENAI_BASE_URL);
+  openaiModel = preferences.getString("openai_model", DEFAULT_OPENAI_MODEL);
+  deepgramModel = preferences.getString("dg_model", DEFAULT_DEEPGRAM_MODEL);
+  deepgramLanguage = preferences.getString("dg_lang", DEFAULT_DEEPGRAM_LANGUAGE);
+  systemPrompt = preferences.getString("sys_prompt", DEFAULT_SYSTEM_PROMPT);
   preferences.end();
-
-  Serial.println("[Flash] Configuration loaded");
-  Serial.println("[Flash] Subscription: " + subscription);
-  Serial.println("[Flash] WiFi SSID: " + wifi_ssid);
   return true;
 }
 
 bool validateConfig() {
-  if (wifi_ssid.isEmpty() || wifi_password.isEmpty()) {
-    Serial.println("[Config] Missing WiFi credentials");
-    return false;
-  }
-  if (asr_api_key.isEmpty()) {
-    Serial.println("[Config] Missing Volcengine ASR API key");
-    return false;
-  }
-  if (openai_apiKey.isEmpty()) {
-    Serial.println("[Config] Missing OpenAI API key");
-    return false;
-  }
-  if (subscription == "pro" && (minimax_apiKey.isEmpty() || minimax_groupId.isEmpty())) {
-    Serial.println("[Config] Pro mode requires MiniMax API key and group ID");
-    return false;
-  }
-  return true;
+  return !wifiSsid.isEmpty() &&
+         !wifiPassword.isEmpty() &&
+         !deepgramApiKey.isEmpty() &&
+         !openaiApiKey.isEmpty();
+}
+
+void printConfigTemplate() {
+  Serial.println("Send one JSON line over serial:");
+  Serial.println(
+    "{\"wifi_ssid\":\"YOUR_WIFI\",\"wifi_password\":\"YOUR_WIFI_PASSWORD\","
+    "\"deepgram_api_key\":\"YOUR_DEEPGRAM_KEY\",\"deepgram_model\":\"nova-2-general\","
+    "\"deepgram_language\":\"en-US\",\"openai_apiKey\":\"YOUR_OPENAI_KEY\","
+    "\"openai_apiBaseUrl\":\"https://api.openai.com\",\"openai_model\":\"gpt-4.1-nano\","
+    "\"system_prompt\":\"You are a concise embedded assistant.\"}");
 }
 
 bool receiveConfig() {
   static String jsonBuffer;
-  static unsigned long lastReceiveTime = 0;
   static bool receiving = false;
-
-  if (!receiving && Serial.available() > 0) {
-    while (Serial.available() > 0 && Serial.peek() != '{') {
-      Serial.read();
-    }
-  }
+  static unsigned long lastReceiveMs = 0;
 
   while (Serial.available() > 0) {
     const char c = static_cast<char>(Serial.read());
-    if (c == '{' && !receiving) {
-      jsonBuffer = "{";
-      receiving = true;
-      lastReceiveTime = millis();
-      continue;
-    }
-
     if (!receiving) {
+      if (c == '{') {
+        jsonBuffer = "{";
+        receiving = true;
+        lastReceiveMs = millis();
+      }
       continue;
     }
 
     jsonBuffer += c;
-    lastReceiveTime = millis();
-
-    if (c != '}') {
-      continue;
-    }
-
-    delay(200);
-    int noDataCount = 0;
-    while (noDataCount < 10) {
-      if (Serial.available() > 0) {
-        const char extra = static_cast<char>(Serial.read());
-        if (extra == '\n' || extra == '\r') {
-          break;
-        }
-        jsonBuffer += extra;
-        noDataCount = 0;
-        delay(2);
-      } else {
-        delay(5);
-        noDataCount++;
-      }
-    }
-
-    jsonBuffer.trim();
-    if (!jsonBuffer.startsWith("{") || !jsonBuffer.endsWith("}")) {
-      jsonBuffer = "";
-      receiving = false;
-      return false;
-    }
+    lastReceiveMs = millis();
+    if (c != '}') continue;
 
     JsonDocument doc;
     const DeserializationError error = deserializeJson(doc, jsonBuffer);
     jsonBuffer = "";
     receiving = false;
-
     if (error) {
       Serial.print("[Config] JSON parse failed: ");
       Serial.println(error.c_str());
       return false;
     }
 
-    if (doc["wifi_ssid"].is<String>()) {
-      wifi_ssid = doc["wifi_ssid"].as<String>();
-    }
-    if (doc["wifi_password"].is<String>()) {
-      wifi_password = doc["wifi_password"].as<String>();
-    }
-    if (doc["subscription"].is<String>()) {
-      subscription = doc["subscription"].as<String>();
-      subscription.toLowerCase();
-    }
-    if (doc["asr_api_key"].is<String>()) {
-      asr_api_key = doc["asr_api_key"].as<String>();
-    }
-    if (doc["asr_cluster"].is<String>()) {
-      asr_cluster = doc["asr_cluster"].as<String>();
-    }
-    if (doc["openai_apiKey"].is<String>()) {
-      openai_apiKey = doc["openai_apiKey"].as<String>();
-    }
-    if (doc["openai_apiBaseUrl"].is<String>()) {
-      openai_apiBaseUrl = doc["openai_apiBaseUrl"].as<String>();
-    }
-    if (doc["system_prompt"].is<String>()) {
-      system_prompt = doc["system_prompt"].as<String>();
-    }
-    if (doc["minimax_apiKey"].is<String>()) {
-      minimax_apiKey = doc["minimax_apiKey"].as<String>();
-    }
-    if (doc["minimax_groupId"].is<String>()) {
-      minimax_groupId = doc["minimax_groupId"].as<String>();
-    }
-    if (doc["tts_voice_id"].is<String>()) {
-      tts_voice_id = doc["tts_voice_id"].as<String>();
-    }
-    if (doc["tts_speed"].is<float>()) {
-      tts_speed = doc["tts_speed"].as<float>();
-    }
-    if (doc["tts_volume"].is<float>()) {
-      tts_volume = doc["tts_volume"].as<float>();
-    }
-    if (doc["tts_model"].is<String>()) {
-      tts_model = doc["tts_model"].as<String>();
-    }
-    if (doc["tts_audio_format"].is<String>()) {
-      tts_audio_format = doc["tts_audio_format"].as<String>();
-    }
-    if (doc["tts_sample_rate"].is<int>()) {
-      tts_sample_rate = doc["tts_sample_rate"].as<int>();
-    }
-    if (doc["tts_bitrate"].is<int>()) {
-      tts_bitrate = doc["tts_bitrate"].as<int>();
-    }
+    if (doc["wifi_ssid"].is<String>()) wifiSsid = doc["wifi_ssid"].as<String>();
+    if (doc["wifi_password"].is<String>()) wifiPassword = doc["wifi_password"].as<String>();
+    if (doc["deepgram_api_key"].is<String>()) deepgramApiKey = doc["deepgram_api_key"].as<String>();
+    if (doc["deepgram_model"].is<String>()) deepgramModel = doc["deepgram_model"].as<String>();
+    if (doc["deepgram_language"].is<String>()) deepgramLanguage = doc["deepgram_language"].as<String>();
+    if (doc["openai_apiKey"].is<String>()) openaiApiKey = doc["openai_apiKey"].as<String>();
+    if (doc["openai_apiBaseUrl"].is<String>()) openaiApiBaseUrl = doc["openai_apiBaseUrl"].as<String>();
+    if (doc["openai_model"].is<String>()) openaiModel = doc["openai_model"].as<String>();
+    if (doc["system_prompt"].is<String>()) systemPrompt = doc["system_prompt"].as<String>();
 
     if (!validateConfig()) {
+      Serial.println("[Config] Missing required fields");
       return false;
     }
 
-    Serial.println("[Config] Configuration received");
-    Serial.println("[Config] Mode: " + subscription);
+    saveConfig();
+    configReceived = true;
+    Serial.println("[Config] Saved");
     return true;
   }
 
-  if (receiving && jsonBuffer.length() > 0 && millis() - lastReceiveTime > 3000) {
-    Serial.println("[Config] Receive timeout, clearing buffer");
+  if (receiving && millis() - lastReceiveMs > 3000) {
     jsonBuffer = "";
     receiving = false;
+    Serial.println("[Config] Timed out");
   }
-
   return false;
 }
 
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-  Serial.println("[WiFi] Connecting...");
-
-  int attempt = 0;
-  while (WiFi.status() != WL_CONNECTED && attempt < 30) {
-    Serial.print('.');
-    delay(500);
-    attempt++;
+  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+  Serial.print("[WiFi] Connecting");
+  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; ++i) {
+    delay(250);
+    Serial.print(".");
   }
   Serial.println();
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WiFi] Connection failed");
-    return false;
-  }
-
-  Serial.println("[WiFi] Connected");
-  Serial.print("[WiFi] IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("[System] Free heap: ");
-  Serial.println(ESP.getFreeHeap());
-  return true;
-}
-
-bool initializeSystem() {
-  if (!validateConfig()) {
-    return false;
-  }
-
-  Serial.println("[System] Initializing");
-  if (!connectWifi()) {
-    return false;
-  }
-
-  asrChat = new ArduinoASRChat(asr_api_key.c_str(), asr_cluster.c_str());
-  gptChat = new ArduinoGPTChat(openai_apiKey.c_str(), openai_apiBaseUrl.c_str());
-  gptChat->setSystemPrompt(system_prompt.c_str());
-  gptChat->enableMemory(true);
-
-  if (!asrChat->initINMP441Microphone(
-        I2S_MIC_SERIAL_CLOCK,
-        I2S_MIC_LEFT_RIGHT_CLOCK,
-        I2S_MIC_SERIAL_DATA)) {
-    Serial.println("[ASR] Microphone init failed");
-    return false;
-  }
-
-  asrChat->setAudioParams(SAMPLE_RATE, 16, 1);
-  asrChat->setSilenceDuration(1000);
-  asrChat->setMaxRecordingSeconds(50);
-  asrChat->setTimeoutNoSpeechCallback([]() {
-    if (continuousMode) {
-      stopContinuousMode();
-    }
-  });
-
-  if (!asrChat->connectWebSocket()) {
-    Serial.println("[ASR] WebSocket connection failed");
-    return false;
-  }
-  Serial.println("[ASR] Ready");
-
-  if (subscription == "pro") {
-    ttsChat = new ArduinoTTSChat(minimax_apiKey.c_str());
-    ttsChat->setVoiceId(tts_voice_id.c_str());
-    ttsChat->setSpeed(tts_speed);
-    ttsChat->setVolume(tts_volume);
-    ttsChat->setAudioParams(tts_sample_rate, tts_bitrate);
-
-    if (!ttsChat->initMAX98357Speaker(I2S_BCLK, I2S_LRC, I2S_DOUT)) {
-      Serial.println("[TTS] MAX98357 init failed");
-      return false;
-    }
-
-    ttsChat->setCompletionCallback(onTTSComplete);
-    ttsChat->setErrorCallback(onTTSError);
-
-    if (!ttsChat->connectWebSocket()) {
-      Serial.println("[TTS] MiniMax WebSocket connection failed");
-      return false;
-    }
-    Serial.println("[TTS] MiniMax WebSocket mode ready");
+  wifiConnected = WiFi.status() == WL_CONNECTED;
+  if (wifiConnected) {
+    Serial.print("[WiFi] IP: ");
+    Serial.println(WiFi.localIP());
   } else {
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    audio.setVolume(20);
-    Serial.println("[TTS] OpenAI audio mode ready");
+    Serial.println("[WiFi] Failed");
+  }
+  return wifiConnected;
+}
+
+void initDisplay() {
+  einkSpi.begin(EINK_CLK_PIN, -1, EINK_DIN_PIN, EINK_CS_PIN);
+  display.epd2.selectSPI(einkSpi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+  display.init(115200, true, 2, false);
+  display.setRotation(0);
+  display.setTextColor(GxEPD_BLACK);
+  display.setFont(&FreeMonoBold9pt7b);
+  displayReady = true;
+}
+
+void initI2CDevices() {
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+
+  drvReady = drv.begin();
+  if (drvReady) {
+    drv.selectLibrary(1);
+    drv.setMode(DRV2605_MODE_INTTRIG);
   }
 
-  Serial.println("[System] Ready");
-  Serial.println("[System] Press BOOT to start or stop conversation");
-  return true;
+  mpuReady = mpu.begin(0x68, &Wire);
+  if (mpuReady) {
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  }
 }
 
-void onTTSComplete() {
-  Serial.println("[TTS] Playback completed");
-  ttsCompleted = true;
+bool initMicrophone() {
+  microphoneI2S.setPins(MIC_SCK_PIN, MIC_WS_PIN, -1, MIC_SD_PIN);
+  return microphoneI2S.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT);
 }
 
-void onTTSError(const char* error) {
-  Serial.print("[TTS] Error: ");
-  Serial.println(error);
-  ttsCompleted = true;
+void stopMicrophone() {
+  microphoneI2S.end();
 }
 
-void startContinuousMode() {
-  continuousMode = true;
-  currentState = STATE_LISTENING;
-  Serial.println("[Conversation] Started");
+void ensureAudioBuffer() {
+  if (audioBuffer != nullptr) return;
+  audioBuffer = static_cast<uint8_t*>(heap_caps_malloc(MAX_AUDIO_BYTES + WAV_HEADER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
 
-  if (!asrChat->startRecording()) {
-    Serial.println("[ASR] Failed to start recording");
-    continuousMode = false;
-    currentState = STATE_IDLE;
+void writeWavHeader(uint8_t* buffer, size_t pcmBytes) {
+  const uint32_t chunkSize = pcmBytes + WAV_HEADER_SIZE - 8;
+  const uint32_t byteRate = SAMPLE_RATE * 2;
+  const uint16_t blockAlign = 2;
+  const uint16_t bitsPerSample = 16;
+  const uint32_t dataSize = pcmBytes;
+
+  memcpy(buffer + 0, "RIFF", 4);
+  memcpy(buffer + 4, &chunkSize, 4);
+  memcpy(buffer + 8, "WAVE", 4);
+  memcpy(buffer + 12, "fmt ", 4);
+  const uint32_t subChunk1Size = 16;
+  const uint16_t audioFormat = 1;
+  const uint16_t channels = 1;
+  memcpy(buffer + 16, &subChunk1Size, 4);
+  memcpy(buffer + 20, &audioFormat, 2);
+  memcpy(buffer + 22, &channels, 2);
+  memcpy(buffer + 24, &SAMPLE_RATE, 4);
+  memcpy(buffer + 28, &byteRate, 4);
+  memcpy(buffer + 32, &blockAlign, 2);
+  memcpy(buffer + 34, &bitsPerSample, 2);
+  memcpy(buffer + 36, "data", 4);
+  memcpy(buffer + 40, &dataSize, 4);
+}
+
+void beginRecording() {
+  ensureAudioBuffer();
+  recordedBytes = 0;
+  if (!initMicrophone()) {
+    updateScreen("MIC FAIL", "", "", true);
+    appState = STATE_ERROR;
     return;
   }
-  Serial.println("[ASR] Listening...");
+  recordStartMs = millis();
+  recording = true;
+  appState = STATE_RECORDING;
+  updateScreen("LISTENING", "", "", true);
+  buzz(47);
 }
 
-void stopContinuousMode() {
-  continuousMode = false;
-  if (asrChat != nullptr && asrChat->isRecording()) {
-    asrChat->stopRecording();
+void captureAudioLoop() {
+  if (!recording) return;
+
+  size_t bytesRead = microphoneI2S.readBytes(reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes), AUDIO_CHUNK_SIZE);
+  if (bytesRead > 0) {
+    recordedBytes = min(recordedBytes + bytesRead, MAX_AUDIO_BYTES);
   }
-  currentState = STATE_IDLE;
-  Serial.println("[Conversation] Stopped");
+
+  if (millis() - recordStartMs >= MAX_RECORD_SECONDS * 1000UL) {
+    recording = false;
+  }
 }
 
-void handleASRResult() {
-  const String transcribedText = asrChat->getRecognizedText();
-  asrChat->clearResult();
+void endRecording() {
+  recording = false;
+  stopMicrophone();
+  writeWavHeader(audioBuffer, recordedBytes);
+  buzz(10);
+}
 
-  if (transcribedText.isEmpty()) {
-    Serial.println("[ASR] No text recognized");
-    if (continuousMode) {
-      delay(250);
-      currentState = STATE_LISTENING;
-      if (asrChat->startRecording()) {
-        Serial.println("[ASR] Listening...");
-      } else {
-        stopContinuousMode();
-      }
-    } else {
-      currentState = STATE_IDLE;
-    }
+String deepgramTranscribe() {
+  updateScreen("TRANSCRIBING");
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  String url = "https://api.deepgram.com/v1/listen?model=" + deepgramModel +
+               "&language=" + deepgramLanguage +
+               "&smart_format=true&punctuate=true";
+
+  if (!http.begin(client, url)) {
+    return "";
+  }
+
+  http.addHeader("Authorization", "Token " + deepgramApiKey);
+  http.addHeader("Content-Type", "audio/wav");
+
+  const int code = http.POST(audioBuffer, recordedBytes + WAV_HEADER_SIZE);
+  if (code <= 0) {
+    Serial.printf("[Deepgram] HTTP error %d\n", code);
+    http.end();
+    return "";
+  }
+
+  const String body = http.getString();
+  http.end();
+
+  JsonDocument doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    Serial.println("[Deepgram] Parse failed");
+    return "";
+  }
+
+  String transcript = doc["results"]["channels"][0]["alternatives"][0]["transcript"].as<String>();
+  transcript.trim();
+  return transcript;
+}
+
+String openaiReply(const String& transcript) {
+  updateScreen("THINKING", transcript, "", true);
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  if (!http.begin(client, openaiApiBaseUrl + "/v1/chat/completions")) {
+    return "";
+  }
+
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", "Bearer " + openaiApiKey);
+
+  JsonDocument doc;
+  doc["model"] = openaiModel;
+  JsonArray messages = doc["messages"].to<JsonArray>();
+  JsonObject sys = messages.add<JsonObject>();
+  sys["role"] = "system";
+  sys["content"] = dynamicPrompt();
+  JsonObject user = messages.add<JsonObject>();
+  user["role"] = "user";
+  user["content"] = transcript;
+  doc["temperature"] = 0.6;
+
+  String payload;
+  serializeJson(doc, payload);
+
+  const int code = http.POST(payload);
+  if (code <= 0) {
+    Serial.printf("[OpenAI] HTTP error %d\n", code);
+    http.end();
+    return "";
+  }
+
+  const String body = http.getString();
+  http.end();
+
+  JsonDocument response;
+  if (deserializeJson(response, body) != DeserializationError::Ok) {
+    Serial.println("[OpenAI] Parse failed");
+    return "";
+  }
+
+  String reply = response["choices"][0]["message"]["content"].as<String>();
+  reply.replace("\n", " ");
+  reply.trim();
+  return reply;
+}
+
+void processInjectedTranscript(String transcript) {
+  transcript.trim();
+  if (transcript.isEmpty()) {
     return;
   }
 
-  Serial.println("[ASR] Recognized: " + transcribedText);
-  currentState = STATE_PROCESSING_LLM;
-  const String response = gptChat->sendMessage(transcribedText);
+  Serial.println("[Injected] " + transcript);
+  captionUser = transcript;
+  appState = STATE_THINKING;
 
-  if (response.isEmpty()) {
-    Serial.println("[LLM] No response received");
-    if (continuousMode) {
-      delay(250);
-      currentState = STATE_LISTENING;
-      if (asrChat->startRecording()) {
-        Serial.println("[ASR] Listening...");
-      } else {
-        stopContinuousMode();
-      }
-    } else {
-      currentState = STATE_IDLE;
-    }
+  const String reply = openaiReply(transcript);
+  if (reply.isEmpty()) {
+    captionAssistant = "OpenAI request failed.";
+    updateScreen("LLM FAIL", captionUser, captionAssistant, true);
+    appState = STATE_IDLE;
     return;
   }
 
-  Serial.println("[LLM] Response: " + response);
-  currentState = STATE_PLAYING_TTS;
+  Serial.println("[AI] " + reply);
+  captionAssistant = reply;
+  updateScreen("READY", captionUser, captionAssistant, true);
+  buzz(74);
+  appState = STATE_SHOWING_RESULT;
+}
 
-  bool success = false;
-  if (subscription == "pro") {
-    ttsCompleted = false;
-    success = ttsChat->speak(response.c_str());
+void processRecording() {
+  appState = STATE_TRANSCRIBING;
+  const String transcript = deepgramTranscribe();
+  if (transcript.isEmpty()) {
+    captionUser = "No speech recognized.";
+    captionAssistant = "";
+    updateScreen("NO SPEECH", captionUser, captionAssistant, true);
+    appState = STATE_IDLE;
+    return;
+  }
+
+  Serial.println("[User] " + transcript);
+  captionUser = transcript;
+
+  appState = STATE_THINKING;
+  const String reply = openaiReply(transcript);
+  if (reply.isEmpty()) {
+    captionAssistant = "OpenAI request failed.";
+    updateScreen("LLM FAIL", captionUser, captionAssistant, true);
+    appState = STATE_IDLE;
+    return;
+  }
+
+  Serial.println("[AI] " + reply);
+  captionAssistant = reply;
+  updateScreen("READY", captionUser, captionAssistant, true);
+  buzz(74);
+  appState = STATE_SHOWING_RESULT;
+}
+
+void printHardwareSummary() {
+  Serial.println("ROCK ESP32-S3");
+  Serial.println("PTT button GPIO2");
+  Serial.println("Pot GPIO8");
+  Serial.println("INMP441 WS=4 SCK=5 SD=6");
+  Serial.println("I2C SDA=38 SCL=39");
+  Serial.println("EINK DIN=11 CLK=12 CS=10 DC=13 RST=14 BUSY=9");
+}
+
+void initializeSystem() {
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(POT_PIN, INPUT);
+  printHardwareSummary();
+  initDisplay();
+  initI2CDevices();
+
+  if (loadConfig()) {
+    configReceived = validateConfig();
+  }
+
+  if (configReceived && connectWifi()) {
+    appState = STATE_IDLE;
+    captionUser = drvReady ? "DRV2605L OK" : "DRV2605L not found";
+    captionAssistant = mpuReady ? "MPU6050 OK" : "MPU6050 not found";
+    updateScreen("READY", captionUser, captionAssistant, true);
   } else {
-    success = gptChat->textToSpeech(response);
+    appState = STATE_WAITING_CONFIG;
+    captionUser = "Send JSON config over Serial.";
+    captionAssistant = "Then press button.";
+    updateScreen("CONFIG", captionUser, captionAssistant, true);
+    printConfigTemplate();
   }
+}
 
-  if (!success) {
-    Serial.println("[TTS] Failed to start playback");
-    if (continuousMode) {
-      delay(250);
-      currentState = STATE_LISTENING;
-      if (asrChat->startRecording()) {
-        Serial.println("[ASR] Listening...");
-      } else {
-        stopContinuousMode();
-      }
-    } else {
-      currentState = STATE_IDLE;
+void processSerialCommands() {
+  while (Serial.available() > 0) {
+    const char c = static_cast<char>(Serial.read());
+    if (c == '\r') {
+      continue;
     }
-    return;
-  }
+    if (c != '\n') {
+      serialLineBuffer += c;
+      continue;
+    }
 
-  currentState = STATE_WAIT_TTS_COMPLETE;
-  ttsStartTime = millis();
-  ttsCheckTime = millis();
+    String line = serialLineBuffer;
+    serialLineBuffer = "";
+    line.trim();
+    if (line.isEmpty()) {
+      continue;
+    }
+
+    if (line.startsWith("TEST:")) {
+      if (appState == STATE_IDLE || appState == STATE_SHOWING_RESULT) {
+        processInjectedTranscript(line.substring(5));
+      } else {
+        Serial.println("[Test] Busy");
+      }
+      continue;
+    }
+
+    if (line == "STATUS") {
+      Serial.print("[Status] ");
+      Serial.println(statusLine);
+      continue;
+    }
+
+    if (line == "HELP") {
+      Serial.println("Commands:");
+      Serial.println("TEST:<message>  run OpenAI/display path without mic");
+      Serial.println("STATUS          print current status");
+      continue;
+    }
+  }
 }
 
 }  // namespace
@@ -522,132 +666,45 @@ void setup() {
   Serial.setRxBufferSize(4096);
   Serial.begin(115200);
   delay(1000);
-
-  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
-  randomSeed(analogRead(0) + millis());
-
-  Serial.println();
-  Serial.println("ESP32-S3 DAZI-AI Voice Assistant");
-  Serial.println("Board target: Waveshare ESP32-S3 WROOM N32R16");
-  Serial.println("Mic pins: BCLK=5 WS=4 SD=6");
-  Serial.println("Speaker pins: BCLK=48 LRC=45 DIN=47");
-
-  if (loadConfigFromFlash()) {
-    configReceived = true;
-    Serial.println("[Startup] Saved config available");
-    Serial.println("[Startup] Send new JSON before pressing BOOT to replace it");
-  } else {
-    printConfigTemplate();
-  }
-
-  Serial.println("[Startup] Press BOOT to initialize after config is present");
+  initializeSystem();
 }
 
 void loop() {
-  if (currentState == STATE_WAITING_CONFIG) {
+  processSerialCommands();
+
+  if (appState == STATE_WAITING_CONFIG) {
     if (receiveConfig()) {
-      configReceived = true;
-      Serial.println("[Startup] New config staged; press BOOT to initialize and save");
-    }
-
-    buttonPressed = digitalRead(BOOT_BUTTON_PIN) == LOW;
-    if (buttonPressed && !wasButtonPressed && configReceived && !systemInitialized) {
-      wasButtonPressed = true;
-      if (initializeSystem()) {
-        systemInitialized = true;
-        saveConfigToFlash();
-        delay(500);
-        startContinuousMode();
+      if (connectWifi()) {
+        appState = STATE_IDLE;
+        captionUser = "Config saved.";
+        captionAssistant = "Push button to talk.";
+        updateScreen("READY", captionUser, captionAssistant, true);
+        buzz(89);
       } else {
-        Serial.println("[Startup] Initialization failed");
+        captionUser = "WiFi connection failed.";
+        captionAssistant = "Check credentials.";
+        updateScreen("WIFI FAIL", captionUser, captionAssistant, true);
       }
-    } else if (!buttonPressed && wasButtonPressed) {
-      wasButtonPressed = false;
     }
-
-    delay(50);
+    delay(20);
     return;
   }
 
-  if (subscription == "pro" && ttsChat != nullptr) {
-    ttsChat->loop();
-  } else {
-    audio.loop();
+  const bool buttonPressed = digitalRead(BUTTON_PIN) == LOW;
+
+  if (buttonPressed && !buttonWasPressed && (appState == STATE_IDLE || appState == STATE_SHOWING_RESULT)) {
+    beginRecording();
   }
 
-  if (asrChat != nullptr) {
-    asrChat->loop();
+  if (buttonPressed && recording) {
+    captureAudioLoop();
   }
 
-  buttonPressed = digitalRead(BOOT_BUTTON_PIN) == LOW;
-  if (buttonPressed && !wasButtonPressed) {
-    wasButtonPressed = true;
-    if (continuousMode) {
-      stopContinuousMode();
-    }
-  } else if (!buttonPressed && wasButtonPressed) {
-    wasButtonPressed = false;
+  if (!buttonPressed && buttonWasPressed && recording) {
+    endRecording();
+    processRecording();
   }
 
-  switch (currentState) {
-    case STATE_IDLE:
-      break;
-    case STATE_LISTENING:
-      if (asrChat->hasNewResult()) {
-        handleASRResult();
-      }
-      break;
-    case STATE_PROCESSING_LLM:
-    case STATE_PLAYING_TTS:
-      break;
-    case STATE_WAIT_TTS_COMPLETE:
-      if (millis() - ttsCheckTime > 100) {
-        ttsCheckTime = millis();
-        bool playbackComplete = false;
-        if (subscription == "pro") {
-          playbackComplete = ttsCompleted || !ttsChat->isPlaying();
-        } else {
-          playbackComplete = !audio.isRunning();
-        }
-
-        if (playbackComplete) {
-          Serial.println("[TTS] Playback finished");
-          if (continuousMode) {
-            delay(250);
-            currentState = STATE_LISTENING;
-            if (asrChat->startRecording()) {
-              Serial.println("[ASR] Listening...");
-            } else {
-              stopContinuousMode();
-            }
-          } else {
-            currentState = STATE_IDLE;
-          }
-        } else if (millis() - ttsStartTime > 60000) {
-          Serial.println("[TTS] Timeout");
-          if (subscription == "pro" && ttsChat != nullptr) {
-            ttsChat->stop();
-          }
-          if (continuousMode) {
-            currentState = STATE_LISTENING;
-            if (asrChat->startRecording()) {
-              Serial.println("[ASR] Listening...");
-            } else {
-              stopContinuousMode();
-            }
-          } else {
-            currentState = STATE_IDLE;
-          }
-        }
-      }
-      break;
-    case STATE_WAITING_CONFIG:
-      break;
-  }
-
-  if (currentState == STATE_LISTENING || currentState == STATE_WAIT_TTS_COMPLETE) {
-    delay(1);
-  } else {
-    delay(10);
-  }
+  buttonWasPressed = buttonPressed;
+  delay(recording ? 1 : 10);
 }

@@ -1,43 +1,43 @@
 # ROCK
 
-This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` and vendors the upstream `DAZI-AI` Arduino library directly into this repo.
+This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running a push-to-talk assistant:
 
-The previous UNO Q / Debian-side ambient AI setup is obsolete here and has been replaced with a pure ESP32-S3 Arduino flow:
+- INMP441 microphone -> Deepgram STT
+- OpenAI text reply
+- Waveshare 1.54" e-paper captions/status
+- DRV2605L and MPU6050 on shared I2C
 
-- `DAZI-AI/`
-  DAZI voice-assistant library imported from `https://github.com/zenhall/DAZI-AI`
-- `ROCK/ROCK.ino`
-  Main sketch adapted for this board
-- `scripts/flash.ps1`
-  Arduino CLI build and upload helper
+The old UNO Q / Debian-side flow is obsolete here.
+The temporary `DAZI-AI` import used during early integration has been removed; the active firmware is self-contained in this repo.
 
 ## Target Board
 
 - Arduino FQBN base: `esp32:esp32:esp32s3`
 - Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
-- Serial port detected during integration: `COM6`
+- Board enumerated as `COM9` during the latest flash, but Windows may assign a different COM port after reconnects
 
 ## Wiring
 
-This sketch assumes external I2S audio hardware:
-
 - INMP441 microphone
-  - `SCK -> GPIO5`
   - `WS -> GPIO4`
+  - `SCK -> GPIO5`
   - `SD -> GPIO6`
-  - `L/R -> GND`
-  - `VDD -> 3.3V`
-  - `GND -> GND`
-- MAX98357A speaker amp
-  - `BCLK -> GPIO48`
-  - `LRC -> GPIO45`
-  - `DIN -> GPIO47`
-  - `VIN -> 5V or board speaker supply`
-  - `GND -> GND`
-- Start/stop button
-  - Uses onboard `BOOT` button on `GPIO0`
+- Waveshare 1.54" e-paper V2
+  - `DIN -> GPIO11`
+  - `CLK -> GPIO12`
+  - `CS -> GPIO10`
+  - `DC -> GPIO13`
+  - `RST -> GPIO14`
+  - `BUSY -> GPIO9`
+- DRV2605L + MPU6050 shared I2C
+  - `SDA -> GPIO38`
+  - `SCL -> GPIO39`
+- Momentary button
+  - `GPIO2`
+- Potentiometer
+  - `GPIO8`
 
-If your mic or speaker is wired to different pins, update the constants at the top of [ROCK.ino](/c:/Users/Jake/Documents/GitHub/ROCK/ROCK/ROCK.ino).
+If any wiring changes, update the pin constants at the top of [ROCK.ino](/c:/Users/Jake/Documents/GitHub/ROCK/ROCK/ROCK.ino).
 
 ## Build
 
@@ -51,29 +51,53 @@ If your mic or speaker is wired to different pins, update the constants at the t
 ./scripts/flash.ps1 -Upload
 ```
 
-If your board is not on `COM6`, pass the correct port:
+If your board is not on `COM9`, pass the correct port:
 
 ```powershell
-./scripts/flash.ps1 -Upload -Port COM7
+./scripts/flash.ps1 -Upload -Port COM10
 ```
 
 ## Runtime Configuration
 
-Secrets are not hardcoded. On first boot, open a serial monitor at `115200`, send one JSON line, then press `BOOT`.
+Secrets are provisioned over serial and stored in `Preferences`.
 
-Free mode example:
-
-```json
-{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","subscription":"free","asr_api_key":"YOUR_VOLCENGINE_ASR_KEY","asr_cluster":"volcengine_input_en","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","system_prompt":"You are a concise voice assistant."}
-```
-
-Pro mode example:
+Manual JSON format:
 
 ```json
-{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","subscription":"pro","asr_api_key":"YOUR_VOLCENGINE_ASR_KEY","asr_cluster":"volcengine_input_en","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","system_prompt":"You are a concise voice assistant.","minimax_apiKey":"YOUR_MINIMAX_KEY","minimax_groupId":"YOUR_GROUP_ID","tts_voice_id":"female-tianmei","tts_speed":1.0,"tts_volume":1.0,"tts_model":"speech-2.6-hd","tts_audio_format":"mp3","tts_sample_rate":16000,"tts_bitrate":32000}
+{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a concise embedded assistant."}
 ```
 
-The sketch saves that config into `Preferences`, so you only need to resend it when you want to change credentials or prompts.
+Helper script:
+
+```powershell
+./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -OpenAIApiKey "YOUR_OPENAI_KEY"
+```
+
+Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO8` scales the reply length target.
+
+## Serial Test Mode
+
+The firmware includes a serial-injected transcript path so the OpenAI/display pipeline can be tested without the microphone.
+
+Open a terminal on the active board port at `115200`:
+
+```powershell
+arduino-cli monitor -p COM9 -c baudrate=115200
+```
+
+Available commands:
+
+- `HELP`
+- `STATUS`
+- `TEST:<message>`
+
+Example:
+
+```text
+TEST:Say hello from the OpenAI test path
+```
+
+This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
 
 ## Arduino CLI Dependencies
 
@@ -83,11 +107,15 @@ Installed during integration:
 - `ArduinoJson`
 - `ArduinoWebsockets`
 - `Seeed_Arduino_mbedtls`
+- `GxEPD2`
+- `Adafruit DRV2605 Library`
+- `Adafruit MPU6050`
+- `Adafruit Unified Sensor`
 
 ## Current Status
 
-- DAZI-AI imported into the repo
-- Main ESP32-S3 sketch added
+- Main ESP32-S3 sketch now uses Deepgram + OpenAI text only
+- E-paper caption UI added
 - Arduino CLI build/upload helper added
-- Old README replaced
-- `esp32-llm` removal attempted; only a stale locked build-log residue may remain if Windows still has the old directory open
+- Serial provisioning helper added
+- Serial `TEST:` mode added for non-mic pipeline checks
