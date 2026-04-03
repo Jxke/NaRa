@@ -1,5 +1,61 @@
 # CODEX
 
+## Current Session Context
+
+This section supersedes older notes below when they conflict.
+
+- The live firmware target is still the `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` using Arduino target `esp32:esp32:esp32s3`.
+- Current hotspot defaults are:
+  - Wi-Fi SSID: `Tim Apple iPhone`
+  - Wi-Fi password: `thesameasyours`
+- Device settings are persisted in ESP32 `Preferences` and can override compile-time defaults unless code explicitly migrates or forces them. This includes:
+  - Wi-Fi SSID/password
+  - Deepgram/OpenAI keys
+  - model settings
+  - `systemPrompt`
+- The button is on `GPIO2` and is wired as `INPUT_PULLUP`.
+  - idle = `HIGH`
+  - pressed = `LOW`
+  - current interaction is hold-to-speak: press starts mic capture, release stops capture and runs Deepgram -> OpenAI.
+- The mic is an `INMP441` on:
+  - `WS -> GPIO4`
+  - `SCK -> GPIO5`
+  - `SD -> GPIO6`
+- The mic path was made stable again by moving away from fragile runtime buffer allocation.
+  - audio now uses a static PSRAM-backed buffer reserved at boot
+  - earlier GUI work increased memory pressure and caused `Mic buffer alloc failed`
+- The microphone should stay idle except during hold-to-speak or explicit caption commands. It should not be probed continuously during boot/self-test.
+- Current I2C devices are on:
+  - `SDA -> GPIO38`
+  - `SCL -> GPIO39`
+  - `DRV2605L` detected at `0x5A`
+  - `MPU6050` detected at `0x68`
+- If `SCAN` reports `SDA=LOW SCL=LOW`, treat that as a wiring or electrical bus problem, not an address problem.
+- The `DRV2605L` is controlled over I2C. Its `IN` pin is not required for the current firmware mode.
+- The attached vibration motor is a 2-wire ERM motor, not an LRA.
+- The IMU has been verified working over serial. The haptic driver is detected over I2C, but physical motor vibration has been inconsistent and should still be validated with `BUZZ`.
+- The display was temporarily changed to a chat-style GUI, but that was rolled back after regressions. Current display behavior is the older fixed layout with:
+  - `ROCK` header
+  - `WiFi:` / `POT:` row
+  - `USER` section
+  - `AI` section
+- `POT` refers to the potentiometer on `GPIO8`. It controls reply-length budget in the normal text-reply path.
+- A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
+- Serial helpers worth remembering:
+  - `HELP`
+  - `STATUS`
+  - `PROMPT`
+  - `PROMPT DEFAULT`
+  - `TEST:<message>`
+  - `BUZZ`
+  - `SCAN`
+  - `SENSORS`
+- `arduino-cli monitor` has been unreliable on this board at times. `screen /dev/cu.usbmodem... 115200` is often a more reliable fallback.
+- USB serial ports seen during this session included:
+  - `/dev/cu.usbmodem1423101`
+  - `/dev/cu.usbmodem1424101`
+- Recent prompt work focused on getting OpenAI replies to be a single emoticon / ASCII emoticon. If future behavior seems inconsistent, inspect the active prompt and the reply post-processing path before assuming the model is ignoring instructions.
+
 ## Purpose
 
 This repo was repurposed from an older Arduino UNO Q / Debian-side project into a pure ESP32-S3 firmware project for a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M`.

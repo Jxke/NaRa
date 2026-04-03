@@ -14,7 +14,9 @@ The temporary `DAZI-AI` import used during early integration has been removed; t
 
 - Arduino FQBN base: `esp32:esp32:esp32s3`
 - Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
-- Board enumerated as `COM9` during the latest flash, but Windows may assign a different COM port after reconnects
+- Board ports are host-specific and may change after reconnects.
+  - Windows example: `COM9`
+  - macOS examples seen during this session: `/dev/cu.usbmodem1423101`, `/dev/cu.usbmodem1424101`
 
 ## Wiring
 
@@ -34,15 +36,23 @@ The temporary `DAZI-AI` import used during early integration has been removed; t
   - `SCL -> GPIO39`
 - Momentary button
   - `GPIO2`
+  - configured as `INPUT_PULLUP`
+  - idle = `HIGH`, pressed = `LOW`
 - Potentiometer
   - `GPIO8`
 
-If any wiring changes, update the pin constants at the top of [ROCK.ino](/c:/Users/Jake/Documents/GitHub/ROCK/ROCK/ROCK.ino).
+If any wiring changes, update the pin constants at the top of `ROCK/ROCK.ino`.
 
 ## Build
 
 ```powershell
 ./scripts/flash.ps1
+```
+
+Arduino CLI equivalent:
+
+```bash
+arduino-cli compile --fqbn esp32:esp32:esp32s3 ROCK
 ```
 
 ## Upload
@@ -57,14 +67,36 @@ If your board is not on `COM9`, pass the correct port:
 ./scripts/flash.ps1 -Upload -Port COM10
 ```
 
+Arduino CLI equivalents:
+
+```bash
+arduino-cli upload -p /dev/cu.usbmodem1424101 --fqbn esp32:esp32:esp32s3 ROCK
+```
+
+```bash
+arduino-cli board list
+```
+
 ## Runtime Configuration
 
 Secrets are provisioned over serial and stored in `Preferences`.
 
+`Preferences` is the ESP32 persistent key-value store used for:
+
+- Wi-Fi SSID/password
+- Deepgram/OpenAI keys
+- model settings
+- `systemPrompt`
+
+The sketch now boots with these Wi-Fi defaults unless you override them over serial:
+
+- `wifi_ssid`: `Tim Apple iPhone`
+- `wifi_password`: `thesameasyours`
+
 Manual JSON format:
 
 ```json
-{"wifi_ssid":"YOUR_WIFI","wifi_password":"YOUR_WIFI_PASSWORD","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a concise embedded assistant."}
+{"wifi_ssid":"Tim Apple iPhone","wifi_password":"thesameasyours","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
 ```
 
 Helper script:
@@ -74,6 +106,13 @@ Helper script:
 ```
 
 Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO8` scales the reply length target.
+
+Current interaction model:
+
+- hold `GPIO2` button to record
+- release the button to stop recording
+- firmware then runs `Deepgram -> OpenAI`
+- the e-paper displays the transcript in `USER` and the reply in `AI`
 
 ## Serial Test Mode
 
@@ -85,10 +124,34 @@ Open a terminal on the active board port at `115200`:
 arduino-cli monitor -p COM9 -c baudrate=115200
 ```
 
+macOS example:
+
+```bash
+arduino-cli monitor -p /dev/cu.usbmodem1424101 -c baudrate=115200
+```
+
+If `arduino-cli monitor` is unreliable on this USB CDC port, `screen` is often more stable:
+
+```bash
+screen /dev/cu.usbmodem1424101 115200
+```
+
 Available commands:
 
 - `HELP`
 - `STATUS`
+- `PROMPT`
+- `PROMPT DEFAULT`
+- `BUZZ[:n]`
+- `SCAN`
+- `SENSORS`
+- `MONITOR ON`
+- `MONITOR OFF`
+- `CAPTION`
+- `CAPTION ON`
+- `CAPTION OFF`
+- `MIC LEFT`
+- `MIC RIGHT`
 - `TEST:<message>`
 
 Example:
@@ -98,6 +161,16 @@ TEST:Say hello from the OpenAI test path
 ```
 
 This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
+
+Notes:
+
+- `PROMPT` prints the stored and effective system prompt.
+- `PROMPT DEFAULT` resets the stored prompt back to the firmware default.
+- `BUZZ` triggers the DRV2605L haptic effect test.
+- `SCAN` scans the I2C bus and reports idle line state.
+- `SENSORS` and `MONITOR ON` are for button, potentiometer, and MPU6050 checks.
+- the microphone should stay idle except during hold-to-speak or explicit caption commands
+- the current firmware forces an ASCII-emoticon-style OpenAI reply mode
 
 ## Arduino CLI Dependencies
 
@@ -114,8 +187,15 @@ Installed during integration:
 
 ## Current Status
 
-- Main ESP32-S3 sketch now uses Deepgram + OpenAI text only
-- E-paper caption UI added
+- Main ESP32-S3 sketch uses `INMP441 -> Deepgram STT -> OpenAI reply`
+- E-paper uses the older fixed layout:
+  - `ROCK` header
+  - `WiFi:` / `POT:` row
+  - `USER`
+  - `AI`
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
 - Serial `TEST:` mode added for non-mic pipeline checks
+- Boot-time and live serial hardware diagnostics added
+- `DRV2605L` is detected over I2C, but physical motor vibration still needs hardware validation with `BUZZ`
+- `MPU6050` has been verified working over serial

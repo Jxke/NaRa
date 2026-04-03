@@ -3,3 +3,4 @@ ambient_ai/__pycache__/
 **/__pycache__/
 *.pyc
 build/
+.DS_Store
