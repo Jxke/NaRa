@@ -12,13 +12,18 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include "esp_heap_caps.h"
+#include "gallery_bitmaps.h"
 
 namespace {
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
-constexpr char DEFAULT_WIFI_SSID[] = "Tim Apple iPhone";
+constexpr char DEFAULT_WIFI_SSID[] = "caroline";
 constexpr char LEGACY_DEFAULT_WIFI_SSID[] = "Tim Apple Iphone";
-constexpr char DEFAULT_WIFI_PASSWORD[] = "thesameasyours";
+constexpr char PRIOR_DEFAULT_WIFI_SSID[] = "Tim Apple iPhone";
+constexpr char SESSION_DEFAULT_WIFI_SSID[] = "Towards The Sun";
+constexpr char DEFAULT_WIFI_PASSWORD[] = "caroline#1";
+constexpr char PRIOR_DEFAULT_WIFI_PASSWORD[] = "thesameasyours";
+constexpr char SESSION_DEFAULT_WIFI_PASSWORD[] = "gsdgsdgsd";
 constexpr char DEFAULT_OPENAI_BASE_URL[] = "https://api.openai.com";
 constexpr char DEFAULT_OPENAI_MODEL[] = "gpt-4.1-nano";
 constexpr char DEFAULT_DEEPGRAM_MODEL[] = "nova-2-general";
@@ -115,6 +120,7 @@ unsigned long recordStartMs = 0;
 unsigned long lastSensorMonitorMs = 0;
 unsigned long lastButtonRawChangeMs = 0;
 unsigned long nextCaptionLoopMs = 0;
+uint8_t resultGalleryStep = 0;
 
 String statusLine = "BOOT";
 String captionUser;
@@ -474,6 +480,20 @@ void fullRender() {
   } while (display.nextPage());
 }
 
+void renderCenteredBitmap(const uint8_t* bitmap) {
+  if (!displayReady) return;
+
+  const int16_t x = (display.width() - GALLERY_BITMAP_LARGE_WIDTH) / 2;
+  const int16_t y = (display.height() - GALLERY_BITMAP_LARGE_HEIGHT) / 2;
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.drawBitmap(x, y, bitmap, GALLERY_BITMAP_LARGE_WIDTH, GALLERY_BITMAP_LARGE_HEIGHT, GxEPD_BLACK);
+  } while (display.nextPage());
+}
+
 void renderStatusOnly() {
   if (!displayReady) return;
 
@@ -494,6 +514,71 @@ void updateScreen(const String& newStatus, const String& userText = "", const St
   if (assistantText.length()) captionAssistant = assistantText;
   if (full) fullRender();
   else renderStatusOnly();
+}
+
+void renderGlyphCollage() {
+  if (!displayReady) return;
+
+  constexpr int16_t TOP_Y = 24;
+  constexpr int16_t BOTTOM_Y = 104;
+  constexpr int16_t LEFT_X = 24;
+  constexpr int16_t RIGHT_X = 112;
+  constexpr int16_t CENTER_X = 68;
+  constexpr int16_t LABEL_Y = 194;
+  constexpr char LABEL_TEXT[] = "SELF-MASTERY";
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    display.drawBitmap(LEFT_X, TOP_Y, TREE_BITMAP_SMALL, GALLERY_BITMAP_SMALL_WIDTH, GALLERY_BITMAP_SMALL_HEIGHT, GxEPD_BLACK);
+    display.drawBitmap(RIGHT_X, TOP_Y, BUTTERFLY_BITMAP_SMALL, GALLERY_BITMAP_SMALL_WIDTH, GALLERY_BITMAP_SMALL_HEIGHT, GxEPD_BLACK);
+    display.drawBitmap(CENTER_X, BOTTOM_Y, FLOWER_BITMAP_SMALL, GALLERY_BITMAP_SMALL_WIDTH, GALLERY_BITMAP_SMALL_HEIGHT, GxEPD_BLACK);
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(LABEL_TEXT, 0, LABEL_Y, &x1, &y1, &w, &h);
+    display.setCursor((display.width() - static_cast<int16_t>(w)) / 2, LABEL_Y);
+    display.print(LABEL_TEXT);
+  } while (display.nextPage());
+}
+
+void renderResultGalleryStep() {
+  switch (resultGalleryStep) {
+    case 0:
+      renderCenteredBitmap(TREE_BITMAP_LARGE);
+      break;
+    case 1:
+      renderCenteredBitmap(BUTTERFLY_BITMAP_LARGE);
+      break;
+    case 2:
+      renderCenteredBitmap(FLOWER_BITMAP_LARGE);
+      break;
+    default:
+      renderGlyphCollage();
+      break;
+  }
+}
+
+void startResultGallery() {
+  resultGalleryStep = 0;
+  appState = STATE_SHOWING_RESULT;
+  renderResultGalleryStep();
+}
+
+void advanceResultGallery() {
+  if (appState != STATE_SHOWING_RESULT) return;
+
+  if (resultGalleryStep < 3) {
+    ++resultGalleryStep;
+    renderResultGalleryStep();
+    return;
+  }
+
+  resultGalleryStep = 0;
+  updateScreen("READY", captionUser, captionAssistant, true);
+  appState = STATE_IDLE;
 }
 
 void saveConfig() {
@@ -530,11 +615,16 @@ bool loadConfig() {
   preferences.end();
 
   bool migrated = false;
-  if (wifiSsid.isEmpty() || wifiSsid == LEGACY_DEFAULT_WIFI_SSID) {
+  if (wifiSsid.isEmpty() ||
+      wifiSsid == LEGACY_DEFAULT_WIFI_SSID ||
+      wifiSsid == PRIOR_DEFAULT_WIFI_SSID ||
+      wifiSsid == SESSION_DEFAULT_WIFI_SSID) {
     wifiSsid = DEFAULT_WIFI_SSID;
     migrated = true;
   }
-  if (wifiPassword.isEmpty()) {
+  if (wifiPassword.isEmpty() ||
+      wifiPassword == PRIOR_DEFAULT_WIFI_PASSWORD ||
+      wifiPassword == SESSION_DEFAULT_WIFI_PASSWORD) {
     wifiPassword = DEFAULT_WIFI_PASSWORD;
     migrated = true;
   }
@@ -564,7 +654,7 @@ void printConfigTemplate() {
   Serial.println(wifiSsid);
   Serial.println("Send one JSON line over serial:");
   Serial.println(
-    "{\"wifi_ssid\":\"Tim Apple iPhone\",\"wifi_password\":\"thesameasyours\","
+    "{\"wifi_ssid\":\"caroline\",\"wifi_password\":\"caroline#1\","
     "\"deepgram_api_key\":\"YOUR_DEEPGRAM_KEY\",\"deepgram_model\":\"nova-2-general\","
     "\"deepgram_language\":\"en-US\",\"openai_apiKey\":\"YOUR_OPENAI_KEY\","
     "\"openai_apiBaseUrl\":\"https://api.openai.com\",\"openai_model\":\"gpt-4.1-nano\","
@@ -1351,9 +1441,8 @@ void processInjectedTranscript(String transcript) {
 
   Serial.println("[AI] " + reply);
   captionAssistant = reply;
-  updateScreen("READY", captionUser, captionAssistant, true);
+  startResultGallery();
   vibrateReplyPattern();
-  appState = STATE_SHOWING_RESULT;
 }
 
 bool runCaptionPass(uint32_t durationMs) {
@@ -1417,10 +1506,9 @@ bool runCaptionPass(uint32_t durationMs) {
   }
 
   captionAssistant = reply;
-  updateScreen("READY", captionUser, captionAssistant, true);
+  startResultGallery();
   Serial.println("[AI] " + reply);
   vibrateReplyPattern();
-  appState = STATE_SHOWING_RESULT;
   return true;
 }
 
@@ -1458,9 +1546,8 @@ void processRecording() {
 
   Serial.println("[AI] " + reply);
   captionAssistant = reply;
-  updateScreen("READY", captionUser, captionAssistant, true);
+  startResultGallery();
   vibrateReplyPattern();
-  appState = STATE_SHOWING_RESULT;
 }
 
 void printHardwareSummary() {
@@ -1852,8 +1939,13 @@ void loop() {
 
   if (buttonPressed &&
       !buttonWasPressed &&
+      appState == STATE_SHOWING_RESULT) {
+    Serial.println("[Button] Press detected, advancing result gallery");
+    advanceResultGallery();
+  } else if (buttonPressed &&
+      !buttonWasPressed &&
       !captionLoopEnabled &&
-      (appState == STATE_IDLE || appState == STATE_SHOWING_RESULT)) {
+      appState == STATE_IDLE) {
     Serial.println("[Button] Press detected, starting recording");
     beginRecording();
   }

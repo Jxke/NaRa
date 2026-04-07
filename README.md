@@ -90,13 +90,13 @@ Secrets are provisioned over serial and stored in `Preferences`.
 
 The sketch now boots with these Wi-Fi defaults unless you override them over serial:
 
-- `wifi_ssid`: `Tim Apple iPhone`
-- `wifi_password`: `thesameasyours`
+- `wifi_ssid`: `caroline`
+- `wifi_password`: `caroline#1`
 
 Manual JSON format:
 
 ```json
-{"wifi_ssid":"Tim Apple iPhone","wifi_password":"thesameasyours","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
+{"wifi_ssid":"caroline","wifi_password":"caroline#1","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
 ```
 
 Helper script:

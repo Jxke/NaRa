@@ -6,8 +6,8 @@ This section supersedes older notes below when they conflict.
 
 - The live firmware target is still the `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` using Arduino target `esp32:esp32:esp32s3`.
 - Current hotspot defaults are:
-  - Wi-Fi SSID: `Tim Apple iPhone`
-  - Wi-Fi password: `thesameasyours`
+  - Wi-Fi SSID: `caroline`
+  - Wi-Fi password: `caroline#1`
 - Device settings are persisted in ESP32 `Preferences` and can override compile-time defaults unless code explicitly migrates or forces them. This includes:
   - Wi-Fi SSID/password
   - Deepgram/OpenAI keys
@@ -123,8 +123,8 @@ Credentials are provisioned over serial and stored in `Preferences`.
 
 Values supplied during this session:
 
-- Wi-Fi SSID: `Towards The Sun`
-- Wi-Fi password: `gsdgsdgsd`
+- Wi-Fi SSID: `caroline`
+- Wi-Fi password: `caroline#1`
 - Deepgram API key: provided by user and provisioned
 - OpenAI API key: provided by user and provisioned
 
