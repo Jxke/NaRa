@@ -16,7 +16,13 @@ This section supersedes older notes below when they conflict.
 - The button is on `GPIO2` and is wired as `INPUT_PULLUP`.
   - idle = `HIGH`
   - pressed = `LOW`
-  - current interaction is hold-to-speak: press starts mic capture, release stops capture and runs Deepgram -> OpenAI.
+  - current interaction is hold-to-speak from `READY`: press starts mic capture, release stops capture and runs Deepgram -> OpenAI
+  - after a successful reply, further button presses cycle the glyph gallery instead of recording:
+    - `TREE` centered at `128x128`
+    - `BUTTERFLY` centered at `128x128`
+    - `FLOWER` centered at `128x128`
+    - 3-glyph collage at `64x64` with centered `SELF-MASTERY`
+    - next press returns to the normal `READY` screen
 - The mic is an `INMP441` on:
   - `WS -> GPIO4`
   - `SCK -> GPIO5`
@@ -34,11 +40,16 @@ This section supersedes older notes below when they conflict.
 - The `DRV2605L` is controlled over I2C. Its `IN` pin is not required for the current firmware mode.
 - The attached vibration motor is a 2-wire ERM motor, not an LRA.
 - The IMU has been verified working over serial. The haptic driver is detected over I2C, but physical motor vibration has been inconsistent and should still be validated with `BUZZ`.
-- The display was temporarily changed to a chat-style GUI, but that was rolled back after regressions. Current display behavior is the older fixed layout with:
+- The default display behavior is the older fixed layout with:
   - `ROCK` header
   - `WiFi:` / `POT:` row
   - `USER` section
   - `AI` section
+- After a successful reply, the display enters a button-driven glyph gallery:
+  - `TREE` at `128x128`
+  - `BUTTERFLY` at `128x128`
+  - `FLOWER` at `128x128`
+  - a final 3-glyph collage with `SELF-MASTERY` centered at the bottom
 - `POT` refers to the potentiometer on `GPIO8`. It controls reply-length budget in the normal text-reply path.
 - A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
 - Serial helpers worth remembering:
@@ -54,6 +65,7 @@ This section supersedes older notes below when they conflict.
 - USB serial ports seen during this session included:
   - `/dev/cu.usbmodem1423101`
   - `/dev/cu.usbmodem1424101`
+  - `/dev/cu.usbmodem21101`
 - Recent prompt work focused on getting OpenAI replies to be a single emoticon / ASCII emoticon. If future behavior seems inconsistent, inspect the active prompt and the reply post-processing path before assuming the model is ignoring instructions.
 
 ## Purpose
@@ -115,6 +127,7 @@ Pin mapping:
   - status
   - captions
   - short assistant replies
+  - post-reply glyph gallery screens
 - A serial `TEST:` path was added so OpenAI/display behavior can be tested without a microphone.
 
 ## Credentials Context
@@ -132,9 +145,10 @@ These credentials should not be duplicated in committed source files. They are i
 
 ## Operational Notes
 
-- Flash helper: [scripts/flash.ps1](/c:/Users/Jake/Documents/GitHub/ROCK/scripts/flash.ps1)
-- Provisioning helper: [scripts/provision.ps1](/c:/Users/Jake/Documents/GitHub/ROCK/scripts/provision.ps1)
-- Main firmware: [ROCK.ino](/c:/Users/Jake/Documents/GitHub/ROCK/ROCK/ROCK.ino)
+- Flash helper: [scripts/flash.ps1](/Users/carolinehana/ROCK/scripts/flash.ps1)
+- Provisioning helper: [scripts/provision.ps1](/Users/carolinehana/ROCK/scripts/provision.ps1)
+- Bitmap conversion helper: [scripts/convert_to_8bit_bmp.swift](/Users/carolinehana/ROCK/scripts/convert_to_8bit_bmp.swift)
+- Main firmware: [ROCK.ino](/Users/carolinehana/ROCK/ROCK/ROCK.ino)
 
 Useful serial commands at `115200`:
 
@@ -154,8 +168,10 @@ TEST:Say hello from the OpenAI test path
 - firmware compiles cleanly with Arduino CLI
 - firmware uploaded successfully to the board
 - serial `TEST:` path works per user report
+- Wi-Fi verified connected to `caroline`
+- button-driven glyph gallery verified in firmware build/upload flow
 
 ## Git Context
 
-- working branch: `dazi-build`
+- working branch: `glyph`
 - remote: `origin https://github.com/Jxke/ROCK.git`

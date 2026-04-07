@@ -4,7 +4,7 @@ This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running a push-
 
 - INMP441 microphone -> Deepgram STT
 - OpenAI text reply
-- Waveshare 1.54" e-paper captions/status
+- Waveshare 1.54" e-paper captions/status plus a post-reply glyph gallery
 - DRV2605L and MPU6050 on shared I2C
 
 The old UNO Q / Debian-side flow is obsolete here.
@@ -112,7 +112,13 @@ Current interaction model:
 - hold `GPIO2` button to record
 - release the button to stop recording
 - firmware then runs `Deepgram -> OpenAI`
-- the e-paper displays the transcript in `USER` and the reply in `AI`
+- the e-paper first displays the transcript in `USER` and the reply in `AI`
+- after a successful reply, the screen enters a button-driven gallery:
+  - first view: centered `TREE` at `128x128`
+  - press 1: centered `BUTTERFLY` at `128x128`
+  - press 2: centered `FLOWER` at `128x128`
+  - press 3: 3-glyph `64x64` collage with centered `SELF-MASTERY`
+  - press 4: returns to the normal `READY` screen so the next press can record again
 
 ## Serial Test Mode
 
@@ -161,6 +167,7 @@ TEST:Say hello from the OpenAI test path
 ```
 
 This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
+It also enters the same post-reply glyph gallery sequence that button-based recordings use.
 
 Notes:
 
@@ -188,13 +195,19 @@ Installed during integration:
 ## Current Status
 
 - Main ESP32-S3 sketch uses `INMP441 -> Deepgram STT -> OpenAI reply`
-- E-paper uses the older fixed layout:
+- E-paper uses the older fixed layout for live interaction:
   - `ROCK` header
   - `WiFi:` / `POT:` row
   - `USER`
   - `AI`
+- After a successful reply, the button cycles a glyph gallery:
+  - `TREE` `128x128`
+  - `BUTTERFLY` `128x128`
+  - `FLOWER` `128x128`
+  - `TREE + BUTTERFLY + FLOWER` at `64x64` with centered `SELF-MASTERY`
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
+- Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs
 - Serial `TEST:` mode added for non-mic pipeline checks
 - Boot-time and live serial hardware diagnostics added
 - `DRV2605L` is detected over I2C, but physical motor vibration still needs hardware validation with `BUZZ`
