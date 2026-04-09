@@ -1522,6 +1522,52 @@ bool runCaptionPass(uint32_t durationMs) {
   return true;
 }
 
+// Maddi context ingestion: sends WAV audio to /ingest-audio Edge Function
+// Fire-and-forget — stores a T1 signal for context building
+void maddiIngest() {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  String url = supabaseUrl + "/functions/v1/ingest-audio";
+  if (!http.begin(client, url)) {
+    Serial.println("[Maddi:Ingest] HTTP begin failed");
+    return;
+  }
+
+  http.addHeader("Content-Type", "audio/wav");
+  http.addHeader("X-Device-Key", deviceApiKey);
+  http.setTimeout(10000);
+
+  // Read motion state from IMU
+  String motionState = "unknown";
+  if (ENABLE_IMU) {
+    sensors_event_t accel, gyro, temp;
+    mpu.getEvent(&accel, &gyro, &temp);
+    float totalAccel = sqrt(
+      accel.acceleration.x * accel.acceleration.x +
+      accel.acceleration.y * accel.acceleration.y +
+      accel.acceleration.z * accel.acceleration.z
+    );
+    if (totalAccel < 10.5) motionState = "still";
+    else if (totalAccel < 13.0) motionState = "walking";
+    else motionState = "active";
+  }
+  http.addHeader("X-Motion-State", motionState);
+
+  Serial.printf("[Maddi:Ingest] POSTing %d bytes to /ingest-audio (motion: %s)\n",
+    recordedBytes + WAV_HEADER_SIZE, motionState.c_str());
+  const int code = http.POST(audioBuffer, recordedBytes + WAV_HEADER_SIZE);
+
+  if (code >= 200 && code < 300) {
+    const String body = http.getString();
+    Serial.printf("[Maddi:Ingest] OK — %s\n", body.c_str());
+  } else {
+    Serial.printf("[Maddi:Ingest] Failed HTTP %d\n", code);
+  }
+  http.end();
+}
+
 // Maddi consultation: sends WAV audio to /consult Edge Function
 // Returns true on success, populating glyphIds[] and consultWord
 String consultGlyphIds[3];
@@ -1643,7 +1689,11 @@ void processRecording() {
   }
 
   if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() && !deviceApiKey.isEmpty()) {
-    // ─── Maddi path: send audio to /consult, get glyphs + word ───
+    // ─── Maddi path: ingest for context, then consult for glyphs ───
+    appState = STATE_TRANSCRIBING;
+    updateScreen("INGESTING");
+    maddiIngest();  // fire-and-forget: stores T1 signal for context building
+
     appState = STATE_THINKING;
     if (!maddiConsult()) {
       captionAssistant = "Consult failed.";
