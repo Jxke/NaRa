@@ -17,12 +17,7 @@ This section supersedes older notes below when they conflict.
   - idle = `HIGH`
   - pressed = `LOW`
   - current interaction is hold-to-speak from `READY`: press starts mic capture, release stops capture and runs Deepgram -> OpenAI
-  - after a successful reply, further button presses cycle the glyph gallery instead of recording:
-    - `TREE` centered at `128x128`
-    - `BUTTERFLY` centered at `128x128`
-    - `FLOWER` centered at `128x128`
-    - 3-glyph collage at `64x64` with centered `SELF-MASTERY`
-    - next press returns to the normal `READY` screen
+  - after a successful reply, the gallery is controlled by the potentiometer on `GPIO3`
 - The mic is an `INMP441` on:
   - `WS -> GPIO4`
   - `SCK -> GPIO5`
@@ -45,12 +40,12 @@ This section supersedes older notes below when they conflict.
   - `WiFi:` / `POT:` row
   - `USER` section
   - `AI` section
-- After a successful reply, the display enters a button-driven glyph gallery:
+- After a successful reply, the display enters a potentiometer-driven glyph gallery:
   - `TREE` at `128x128`
   - `BUTTERFLY` at `128x128`
   - `FLOWER` at `128x128`
   - a final 3-glyph collage with `SELF-MASTERY` centered at the bottom
-- `POT` refers to the potentiometer on `GPIO8`. It controls reply-length budget in the normal text-reply path.
+- The potentiometer is on `GPIO3`. It now controls gallery selection after a successful reply.
 - A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
 - Serial helpers worth remembering:
   - `HELP`
@@ -115,7 +110,7 @@ Pin mapping:
 - Momentary button
   - `GPIO2`
 - Potentiometer
-  - `GPIO8`
+  - `GPIO3`
 
 ## Decisions Made
 
@@ -169,7 +164,7 @@ TEST:Say hello from the OpenAI test path
 - firmware uploaded successfully to the board
 - serial `TEST:` path works per user report
 - Wi-Fi verified connected to `caroline`
-- button-driven glyph gallery verified in firmware build/upload flow
+- potentiometer-driven glyph gallery verified in firmware build/upload flow
 
 ## Git Context
 
