@@ -97,6 +97,10 @@ String deepgramModel = DEFAULT_DEEPGRAM_MODEL;
 String deepgramLanguage = DEFAULT_DEEPGRAM_LANGUAGE;
 String systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
+String supabaseUrl;
+String deviceApiKey;
+constexpr bool USE_MADDI_PIPELINE = true;  // toggle: true = Supabase, false = direct OpenAI
+
 bool configReceived = false;
 bool wifiConnected = false;
 bool displayReady = false;
@@ -592,6 +596,8 @@ void saveConfig() {
   preferences.putString("dg_model", deepgramModel);
   preferences.putString("dg_lang", deepgramLanguage);
   preferences.putString("sys_prompt", systemPrompt);
+  preferences.putString("supa_url", supabaseUrl);
+  preferences.putString("device_key", deviceApiKey);
   preferences.putBool("configured", true);
   preferences.end();
 }
@@ -612,6 +618,8 @@ bool loadConfig() {
   deepgramModel = preferences.getString("dg_model", DEFAULT_DEEPGRAM_MODEL);
   deepgramLanguage = preferences.getString("dg_lang", DEFAULT_DEEPGRAM_LANGUAGE);
   systemPrompt = preferences.getString("sys_prompt", DEFAULT_SYSTEM_PROMPT);
+  supabaseUrl = preferences.getString("supa_url", "");
+  deviceApiKey = preferences.getString("device_key", "");
   preferences.end();
 
   bool migrated = false;
@@ -681,6 +689,8 @@ bool applyConfigJson(const String& jsonPayload) {
   if (!FORCE_DEFAULT_SYSTEM_PROMPT_MODE && doc["system_prompt"].is<String>()) {
     systemPrompt = doc["system_prompt"].as<String>();
   }
+  if (doc.containsKey("supabase_url")) supabaseUrl = doc["supabase_url"].as<String>();
+  if (doc.containsKey("device_api_key")) deviceApiKey = doc["device_api_key"].as<String>();
 
   if (!hasWifiConfig()) {
     Serial.println("[Config] Missing WiFi credentials");
@@ -1512,6 +1522,116 @@ bool runCaptionPass(uint32_t durationMs) {
   return true;
 }
 
+// Maddi consultation: sends WAV audio to /consult Edge Function
+// Returns true on success, populating glyphIds[] and consultWord
+String consultGlyphIds[3];
+String consultWord;
+
+bool maddiConsult() {
+  if (supabaseUrl.isEmpty() || deviceApiKey.isEmpty()) {
+    Serial.println("[Maddi] supabase_url or device_api_key not configured");
+    return false;
+  }
+
+  updateScreen("CONSULTING");
+  WiFiClientSecure client;
+  client.setInsecure();  // TODO: add cert pinning for production
+  HTTPClient http;
+
+  String url = supabaseUrl + "/functions/v1/consult";
+  if (!http.begin(client, url)) {
+    Serial.println("[Maddi] HTTP begin failed");
+    return false;
+  }
+
+  http.addHeader("Content-Type", "audio/wav");
+  http.addHeader("X-Device-Key", deviceApiKey);
+  http.setTimeout(15000);  // 15s timeout for full pipeline
+
+  Serial.printf("[Maddi] POSTing %d bytes to /consult\n", recordedBytes + WAV_HEADER_SIZE);
+  const int code = http.POST(audioBuffer, recordedBytes + WAV_HEADER_SIZE);
+  const String body = http.getString();
+  http.end();
+
+  if (code <= 0) {
+    Serial.printf("[Maddi] HTTP error %d\n", code);
+    return false;
+  }
+  if (code < 200 || code >= 300) {
+    Serial.printf("[Maddi] HTTP %d\n", code);
+    Serial.println(body);
+    return false;
+  }
+
+  // Parse response: {"glyphs":["spiral","mirror","bridge"],"word":"reflect","consultation_id":1,"latency_ms":2800}
+  JsonDocument doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    Serial.println("[Maddi] JSON parse failed");
+    Serial.println(body);
+    return false;
+  }
+
+  JsonArray glyphs = doc["glyphs"];
+  if (glyphs.size() < 3) {
+    Serial.println("[Maddi] Expected 3 glyphs");
+    return false;
+  }
+
+  for (int i = 0; i < 3; i++) {
+    consultGlyphIds[i] = glyphs[i].as<String>();
+  }
+  consultWord = doc["word"].as<String>();
+  int latencyMs = doc["latency_ms"] | 0;
+
+  Serial.printf("[Maddi] Glyphs: %s, %s, %s | Word: %s | Latency: %dms\n",
+    consultGlyphIds[0].c_str(), consultGlyphIds[1].c_str(), consultGlyphIds[2].c_str(),
+    consultWord.c_str(), latencyMs);
+
+  return true;
+}
+
+void renderMaddiResult() {
+  if (!displayReady) return;
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+
+    // Draw the word prominently at top
+    String upperWord = consultWord;
+    upperWord.toUpperCase();
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(upperWord, 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((200 - (int16_t)w) / 2, 40);
+    display.print(upperWord);
+
+    // Draw a separator line
+    display.drawLine(20, 55, 180, 55, GxEPD_BLACK);
+
+    // Draw the 3 glyph names
+    const int startY = 85;
+    const int lineHeight = 28;
+    const char* labels[] = {"setup", "tension", "resolve"};
+    for (int i = 0; i < 3; i++) {
+      String line = String(labels[i]) + ": " + consultGlyphIds[i];
+      display.getTextBounds(line, 0, 0, &x1, &y1, &w, &h);
+      display.setCursor((200 - (int16_t)w) / 2, startY + i * lineHeight);
+      display.print(line);
+    }
+
+    // Draw separator
+    display.drawLine(20, startY + 3 * lineHeight - 10, 180, startY + 3 * lineHeight - 10, GxEPD_BLACK);
+
+    // Label at bottom
+    display.getTextBounds("MADDI", 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((200 - (int16_t)w) / 2, 192);
+    display.print("MADDI");
+  } while (display.nextPage());
+}
+
 void processRecording() {
   if (recordedBytes == 0) {
     Serial.println("[Mic] No audio captured during hold-to-speak");
@@ -1522,6 +1642,24 @@ void processRecording() {
     return;
   }
 
+  if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() && !deviceApiKey.isEmpty()) {
+    // ─── Maddi path: send audio to /consult, get glyphs + word ───
+    appState = STATE_THINKING;
+    if (!maddiConsult()) {
+      captionAssistant = "Consult failed.";
+      updateScreen("CONSULT FAIL", "", captionAssistant, true);
+      appState = STATE_IDLE;
+      return;
+    }
+    captionUser = consultWord;
+    captionAssistant = consultGlyphIds[0] + " / " + consultGlyphIds[1] + " / " + consultGlyphIds[2];
+    renderMaddiResult();
+    vibrateReplyPattern();
+    appState = STATE_SHOWING_RESULT;
+    return;
+  }
+
+  // ─── Legacy path: direct Deepgram + OpenAI ───
   appState = STATE_TRANSCRIBING;
   const String transcript = deepgramTranscribe();
   if (transcript.isEmpty()) {
@@ -1784,6 +1922,9 @@ void processSerialCommands() {
       Serial.println(dynamicPrompt());
       Serial.print("[Status] OpenAIModel=");
       Serial.println(openaiModel);
+      Serial.println("Supabase URL: " + (supabaseUrl.isEmpty() ? "(not set)" : supabaseUrl));
+      Serial.println("Device Key: " + (deviceApiKey.isEmpty() ? "(not set)" : "****" + deviceApiKey.substring(deviceApiKey.length() - 4)));
+      Serial.println("Pipeline: " + String(USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() ? "MADDI" : "LEGACY"));
       continue;
     }
 
