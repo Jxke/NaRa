@@ -13,6 +13,7 @@
 #include <Adafruit_Sensor.h>
 #include "esp_heap_caps.h"
 #include "gallery_bitmaps.h"
+#include "maddi_logo.h"
 
 namespace {
 
@@ -2127,13 +2128,38 @@ void initializeSystem() {
   printHardwareSummary();
   WiFi.onEvent(onWiFiEvent);
   initDisplay();
-  initI2CDevices();
-  buttonLastRawPressed = readButtonPressedRaw();
-  buttonStablePressed = buttonLastRawPressed;
-  buttonWasPressed = buttonStablePressed;
-  lastButtonRawChangeMs = millis();
-  runHardwareSelfTest();
-  lastSensorMonitorMs = millis();
+
+  // ── Boot splash: show Maddi logo for 10 seconds ──
+  if (displayReady) {
+    display.setFullWindow();
+    display.firstPage();
+    do {
+      display.fillScreen(GxEPD_WHITE);
+      display.drawBitmap(0, 0, MADDI_LOGO, LOGO_WIDTH, LOGO_HEIGHT, GxEPD_BLACK);
+    } while (display.nextPage());
+    Serial.println("[Boot] Splash screen displayed (10s)");
+    unsigned long splashStart = millis();
+    // Continue hardware init during splash wait
+    initI2CDevices();
+    buttonLastRawPressed = readButtonPressedRaw();
+    buttonStablePressed = buttonLastRawPressed;
+    buttonWasPressed = buttonStablePressed;
+    lastButtonRawChangeMs = millis();
+    runHardwareSelfTest();
+    lastSensorMonitorMs = millis();
+    // Wait remaining time to fill 10s
+    while (millis() - splashStart < 10000) {
+      delay(100);
+    }
+  } else {
+    initI2CDevices();
+    buttonLastRawPressed = readButtonPressedRaw();
+    buttonStablePressed = buttonLastRawPressed;
+    buttonWasPressed = buttonStablePressed;
+    lastButtonRawChangeMs = millis();
+    runHardwareSelfTest();
+    lastSensorMonitorMs = millis();
+  }
 
   if (loadConfig()) {
     configReceived = validateConfig();
