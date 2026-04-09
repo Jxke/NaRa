@@ -60,8 +60,8 @@ constexpr uint32_t I2C_CLOCK_HZ = 50000;
 
 constexpr uint32_t SAMPLE_RATE = 16000;
 constexpr uint16_t WAV_HEADER_SIZE = 44;
-constexpr uint32_t MAX_RECORD_SECONDS = 20;
-constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 640KB in PSRAM
+constexpr uint32_t MAX_RECORD_SECONDS = 5;
+constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 160KB in PSRAM
 constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
 constexpr unsigned long SENSOR_MONITOR_INTERVAL_MS = 1000;
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
@@ -69,10 +69,13 @@ constexpr uint32_t CAPTION_RECORD_MS = 4000;
 constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 250;
 
 // Ambient context capture — always-on pipeline
-constexpr uint32_t AMBIENT_RECORD_MS = 20000;    // 20 seconds of recording
-constexpr uint32_t AMBIENT_PAUSE_MS = 5000;       // 5 seconds between captures
-constexpr uint32_t CONSULT_RECORD_SECONDS = 5;    // button-hold still limited to 5s
+// 5s record keeps upload fast (~2s) so button remains responsive.
+// With 5s record + 5s pause = 10s cycle = ~6 captures/min.
+constexpr uint32_t AMBIENT_RECORD_MS = 5000;      // 5 seconds of recording
+constexpr uint32_t AMBIENT_PAUSE_MS = 5000;        // 5 seconds between captures
+constexpr uint32_t CONSULT_RECORD_SECONDS = 5;     // button-hold limited to 5s
 constexpr size_t CONSULT_MAX_AUDIO = SAMPLE_RATE * 2 * CONSULT_RECORD_SECONDS;
+constexpr size_t AMBIENT_MAX_AUDIO = SAMPLE_RATE * 2 * (AMBIENT_RECORD_MS / 1000);
 constexpr unsigned long CAPTION_LOOP_GAP_MS = 500;
 constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
 constexpr bool ENABLE_HAPTIC = true;
@@ -1717,7 +1720,7 @@ void startAmbientCapture() {
 
   ambientCapturing = true;
   ambientCaptureStartMs = millis();
-  Serial.printf("[Ambient] Capture #%u started (20s)\n", ambientCycleCount + 1);
+  Serial.printf("[Ambient] Capture #%u started (%lums)\n", ambientCycleCount + 1, (unsigned long)AMBIENT_RECORD_MS);
 }
 
 void stopAmbientCapture() {
@@ -1735,11 +1738,13 @@ void processAmbientCapture() {
     Serial.println("[Ambient] Interrupted by button press");
     stopAmbientCapture();
     recordedBytes = 0;
+    // Delay next ambient start so button handler has time to take over
+    ambientNextCaptureMs = millis() + 10000;
     return;
   }
 
-  // Capture audio chunk
-  const size_t remaining = MAX_AUDIO_BYTES - recordedBytes;
+  // Capture audio chunk (capped at AMBIENT_MAX_AUDIO)
+  const size_t remaining = AMBIENT_MAX_AUDIO - recordedBytes;
   if (remaining > 0) {
     const size_t bytesToRead = min<size_t>(AUDIO_CHUNK_SIZE, remaining);
     size_t bytesRead = microphoneI2S.readBytes(
@@ -1750,20 +1755,26 @@ void processAmbientCapture() {
     }
   }
 
-  // Check if 20s elapsed or buffer full
+  // Check if time elapsed or buffer full
   if (millis() - ambientCaptureStartMs >= AMBIENT_RECORD_MS ||
-      recordedBytes >= MAX_AUDIO_BYTES) {
+      recordedBytes >= AMBIENT_MAX_AUDIO) {
     stopAmbientCapture();
 
     if (recordedBytes > SAMPLE_RATE * 2) {  // at least 0.5s of audio
+      // Check button before blocking HTTP call — abort if user wants to consult
+      if (digitalRead(BUTTON_PIN) == LOW) {
+        Serial.println("[Ambient] Button pressed before ingest, skipping upload");
+        ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
+        return;
+      }
+
       ambientCycleCount++;
       Serial.printf("[Ambient] Captured %u bytes, sending to /ingest-audio\n", recordedBytes);
 
-      // Show brief status on display (partial update)
       statusLine = String("CTX #") + ambientCycleCount;
       renderStatusOnly();
 
-      maddiIngest();  // send to /ingest-audio for T1 storage
+      maddiIngest();  // send to /ingest-audio (~2s for 160KB)
 
       statusLine = "READY";
       renderStatusOnly();
@@ -1787,12 +1798,11 @@ void processRecording() {
   }
 
   if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() && !deviceApiKey.isEmpty()) {
-    // ─── Maddi path: ingest for context, then consult for glyphs ───
-    appState = STATE_TRANSCRIBING;
-    updateScreen("INGESTING");
-    maddiIngest();  // fire-and-forget: stores T1 signal for context building
-
+    // ─── Maddi path: send audio to /consult, get glyphs + word ───
+    // Skip separate ingest — /consult does its own STT.
+    // Ambient capture handles context building separately.
     appState = STATE_THINKING;
+    updateScreen("THINKING");
     if (!maddiConsult()) {
       captionAssistant = "Consult failed.";
       updateScreen("CONSULT FAIL", "", captionAssistant, true);
@@ -2250,8 +2260,16 @@ void loop() {
   if (buttonPressed &&
       !buttonWasPressed &&
       appState == STATE_SHOWING_RESULT) {
-    Serial.println("[Button] Press detected, advancing result gallery");
-    advanceResultGallery();
+    if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty()) {
+      // Maddi mode: button on result → back to idle (no old gallery)
+      Serial.println("[Button] Dismissing Maddi result, returning to idle");
+      updateScreen("READY", captionUser, captionAssistant, true);
+      appState = STATE_IDLE;
+    } else {
+      // Legacy mode: cycle through glyph gallery
+      Serial.println("[Button] Press detected, advancing result gallery");
+      advanceResultGallery();
+    }
   } else if (buttonPressed &&
       !buttonWasPressed &&
       !captionLoopEnabled &&
