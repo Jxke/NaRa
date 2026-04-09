@@ -61,20 +61,22 @@ constexpr uint32_t I2C_CLOCK_HZ = 50000;
 
 constexpr uint32_t SAMPLE_RATE = 16000;
 constexpr uint16_t WAV_HEADER_SIZE = 44;
-constexpr uint32_t MAX_RECORD_SECONDS = 5;
-constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 160KB in PSRAM
+constexpr uint32_t MAX_RECORD_SECONDS = 10;
+constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 320KB in PSRAM
 constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
 constexpr unsigned long SENSOR_MONITOR_INTERVAL_MS = 1000;
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
 constexpr uint32_t CAPTION_RECORD_MS = 4000;
 constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 250;
 
-// Ambient context capture — VAD-gated adaptive pipeline
-constexpr uint32_t AMBIENT_MAX_RECORD_MS = 30000;   // 30s hard cap
-constexpr uint32_t AMBIENT_SILENCE_TIMEOUT_MS = 2000; // stop after 2s of silence
-constexpr uint32_t AMBIENT_LISTEN_WINDOW_MS = 5000;  // listen for speech this long before giving up
-constexpr uint32_t AMBIENT_REST_SPEECH_MS = 2000;    // pause after speech captured
-constexpr uint32_t AMBIENT_REST_SILENCE_MS = 10000;  // pause after no speech found
+// Ambient context capture — periodic 10s recordings every 60s
+constexpr uint32_t AMBIENT_RECORD_MS = 10000;        // 10s recording
+constexpr uint32_t AMBIENT_REST_MS = 50000;           // 50s pause (total cycle = 60s)
+constexpr uint32_t AMBIENT_MAX_RECORD_MS = 30000;     // hard cap (unused with fixed 10s but kept for safety)
+constexpr uint32_t AMBIENT_SILENCE_TIMEOUT_MS = 2000;
+constexpr uint32_t AMBIENT_LISTEN_WINDOW_MS = 10000;  // listen window = record duration
+constexpr uint32_t AMBIENT_REST_SPEECH_MS = 50000;    // same rest whether speech or not
+constexpr uint32_t AMBIENT_REST_SILENCE_MS = 50000;
 constexpr uint32_t CONSULT_RECORD_SECONDS = 5;       // button-hold limited to 5s
 constexpr size_t CONSULT_MAX_AUDIO = SAMPLE_RATE * 2 * CONSULT_RECORD_SECONDS;
 constexpr size_t AMBIENT_MAX_AUDIO = SAMPLE_RATE * 2 * (AMBIENT_MAX_RECORD_MS / 1000);  // 960KB
@@ -1924,38 +1926,27 @@ void processAmbientStateMachine() {
 
   const unsigned long now = millis();
 
-  // ── LISTENING: waiting for speech onset ──
+  // ── LISTENING: immediately start recording (no VAD gating) ──
   if (ambientState == AMB_LISTENING) {
-    if (windowHasSpeech) {
-      // Speech detected — transition to recording
-      ambientState = AMB_RECORDING;
-      ambientCaptureStartMs = now;
-      ambientLastSpeechMs = now;
-      Serial.printf("[Ambient] Speech onset detected (%.1fdB > %.1fdB), recording...\n",
-        windowDb, vadThresholdDb);
-    } else if (now - ambientListenStartMs >= AMBIENT_LISTEN_WINDOW_MS) {
-      // No speech after listen window — go idle with long rest
-      ambientStop();
-      recordedBytes = 0;
-      ambientNextCaptureMs = now + AMBIENT_REST_SILENCE_MS;
-      // Don't log every silence cycle — too noisy
-    }
+    ambientState = AMB_RECORDING;
+    ambientCaptureStartMs = now;
+    ambientLastSpeechMs = now;
+    Serial.printf("[Ambient] Recording started (10s capture)\n");
     return;
   }
 
-  // ── RECORDING: speech in progress, accumulating audio ──
+  // ── RECORDING: accumulate audio for AMBIENT_RECORD_MS, then always send ──
   if (ambientState == AMB_RECORDING) {
     if (windowHasSpeech) {
       ambientLastSpeechMs = now;
     }
 
-    // Check stop conditions
-    bool silenceTimeout = (now - ambientLastSpeechMs >= AMBIENT_SILENCE_TIMEOUT_MS);
+    bool timeUp = (now - ambientCaptureStartMs >= AMBIENT_RECORD_MS);
     bool maxCap = (now - ambientCaptureStartMs >= AMBIENT_MAX_RECORD_MS);
     bool bufferFull = (recordedBytes >= AMBIENT_MAX_AUDIO);
 
-    if (silenceTimeout || maxCap || bufferFull) {
-      const char* reason = silenceTimeout ? "2s silence" : maxCap ? "30s cap" : "buffer full";
+    if (timeUp || maxCap || bufferFull) {
+      const char* reason = timeUp ? "10s complete" : maxCap ? "30s cap" : "buffer full";
       float durationS = (now - ambientCaptureStartMs) / 1000.0;
 
       ambientStop();
