@@ -1615,7 +1615,7 @@ bool maddiConsult() {
 
   http.addHeader("Content-Type", "audio/wav");
   http.addHeader("X-Device-Key", deviceApiKey);
-  http.setTimeout(15000);  // 15s timeout for full pipeline
+  http.setTimeout(30000);  // 30s timeout — pipeline takes 15-20s
 
   Serial.printf("[Maddi] POSTing %d bytes to /consult\n", recordedBytes + WAV_HEADER_SIZE);
   const int code = http.POST(audioBuffer, recordedBytes + WAV_HEADER_SIZE);
@@ -1708,6 +1708,7 @@ void renderMaddiResult() {
 void startAmbientCapture() {
   if (!wifiConnected || supabaseUrl.isEmpty() || deviceApiKey.isEmpty()) return;
   if (appState != STATE_IDLE) return;
+  if (buttonStablePressed) return;  // don't start if button is held
 
   ensureAudioBuffer();
   recordedBytes = 0;
