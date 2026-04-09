@@ -141,6 +141,14 @@ bool ambientCapturing = false;
 unsigned long ambientNextCaptureMs = 0;
 unsigned long ambientCaptureStartMs = 0;
 uint32_t ambientCycleCount = 0;
+uint32_t ambientSpeechCount = 0;   // cycles that had speech
+
+// VAD — energy-based voice activity detection
+constexpr int VAD_CALIBRATION_CYCLES = 5;      // auto-calibrate during first N cycles
+constexpr float VAD_MARGIN_DB = 2.0;           // speech must be this many dB above noise floor
+float vadNoiseFloorDb = -50.0;                 // updated by calibration
+float vadThresholdDb = -28.0;                  // initial fallback, updated by calibration
+int vadCalibrationCount = 0;
 
 String statusLine = "BOOT";
 String captionUser;
@@ -1701,8 +1709,79 @@ void renderMaddiResult() {
   } while (display.nextPage());
 }
 
+// ─── VAD: Energy-based voice activity detection ─────────────────────
+// Calculates RMS energy (dBFS) of recorded audio buffer.
+// Returns true if energy exceeds threshold (speech likely present).
+
+// Calculate RMS energy in 100ms windows. Returns peak window dBFS and overall dBFS.
+struct VadResult {
+  float overallDb;
+  float peakWindowDb;
+  int speechWindowCount;  // how many 100ms windows exceeded threshold
+};
+
+VadResult calculateVadEnergy() {
+  VadResult result = { -100.0, -100.0, 0 };
+  if (audioBuffer == nullptr || recordedBytes < 320) return result;
+
+  const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
+  const size_t totalSamples = recordedBytes / sizeof(int16_t);
+  const size_t windowSize = SAMPLE_RATE / 10;  // 100ms = 1600 samples at 16kHz
+
+  double totalSumSq = 0;
+  float peakDb = -100.0;
+  int speechWindows = 0;
+
+  for (size_t offset = 0; offset + windowSize <= totalSamples; offset += windowSize) {
+    double windowSumSq = 0;
+    for (size_t i = 0; i < windowSize; i++) {
+      double s = static_cast<double>(samples[offset + i]);
+      windowSumSq += s * s;
+    }
+    totalSumSq += windowSumSq;
+
+    double windowRms = sqrt(windowSumSq / windowSize);
+    if (windowRms < 1.0) windowRms = 1.0;
+    float windowDb = 20.0 * log10(windowRms / 32768.0);
+
+    if (windowDb > peakDb) peakDb = windowDb;
+    if (vadCalibrationCount >= VAD_CALIBRATION_CYCLES && windowDb > vadThresholdDb) {
+      speechWindows++;
+    }
+  }
+
+  double overallRms = sqrt(totalSumSq / totalSamples);
+  if (overallRms < 1.0) overallRms = 1.0;
+  result.overallDb = 20.0 * log10(overallRms / 32768.0);
+  result.peakWindowDb = peakDb;
+  result.speechWindowCount = speechWindows;
+  return result;
+}
+
+bool vadDetectSpeech() {
+  VadResult vad = calculateVadEnergy();
+
+  // Auto-calibrate noise floor during first N cycles (use overall RMS)
+  if (vadCalibrationCount < VAD_CALIBRATION_CYCLES) {
+    vadCalibrationCount++;
+    vadNoiseFloorDb = vadNoiseFloorDb + (vad.overallDb - vadNoiseFloorDb) / vadCalibrationCount;
+    vadThresholdDb = vadNoiseFloorDb + VAD_MARGIN_DB;
+    Serial.printf("[VAD] Calibrating %d/%d: overall=%.1fdB peak=%.1fdB floor=%.1fdB threshold=%.1fdB\n",
+      vadCalibrationCount, VAD_CALIBRATION_CYCLES, vad.overallDb, vad.peakWindowDb,
+      vadNoiseFloorDb, vadThresholdDb);
+    return false;
+  }
+
+  // Speech detected if ANY 100ms window exceeded threshold
+  bool hasSpeech = vad.speechWindowCount > 0;
+  Serial.printf("[VAD] overall=%.1fdB peak=%.1fdB threshold=%.1fdB windows=%d → %s\n",
+    vad.overallDb, vad.peakWindowDb, vadThresholdDb,
+    vad.speechWindowCount, hasSpeech ? "SPEECH" : "silence");
+  return hasSpeech;
+}
+
 // ─── Ambient context capture ────────────────────────────────────────
-// Records 20s of ambient audio, sends to /ingest-audio for T1 storage.
+// Records 5s of ambient audio, runs VAD, sends to /ingest-audio only if speech detected.
 // Runs continuously when idle. Button press interrupts for consultation.
 
 void startAmbientCapture() {
@@ -1761,21 +1840,30 @@ void processAmbientCapture() {
       recordedBytes >= AMBIENT_MAX_AUDIO) {
     stopAmbientCapture();
 
+    ambientCycleCount++;
+
     if (recordedBytes > SAMPLE_RATE * 2) {  // at least 0.5s of audio
-      // Check button before blocking HTTP call — abort if user wants to consult
+      // Run VAD — only upload if speech detected
+      if (!vadDetectSpeech()) {
+        ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
+        return;
+      }
+
+      // Check button before blocking HTTP call
       if (digitalRead(BUTTON_PIN) == LOW) {
         Serial.println("[Ambient] Button pressed before ingest, skipping upload");
         ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
         return;
       }
 
-      ambientCycleCount++;
-      Serial.printf("[Ambient] Captured %u bytes, sending to /ingest-audio\n", recordedBytes);
+      ambientSpeechCount++;
+      Serial.printf("[Ambient] Speech detected! Capture #%u (%u/%u with speech), sending %u bytes\n",
+        ambientCycleCount, ambientSpeechCount, ambientCycleCount, recordedBytes);
 
-      statusLine = String("CTX #") + ambientCycleCount;
+      statusLine = String("CTX ") + ambientSpeechCount;
       renderStatusOnly();
 
-      maddiIngest();  // send to /ingest-audio (~2s for 160KB)
+      maddiIngest();
 
       statusLine = "READY";
       renderStatusOnly();
@@ -2085,7 +2173,9 @@ void processSerialCommands() {
       Serial.println("Device Key: " + (deviceApiKey.isEmpty() ? "(not set)" : "****" + deviceApiKey.substring(deviceApiKey.length() - 4)));
       Serial.println("Pipeline: " + String(USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() ? "MADDI" : "LEGACY"));
       Serial.println("Ambient: " + String(ambientCaptureEnabled ? "ON" : "OFF") +
-        " (cycles: " + ambientCycleCount + ", capturing: " + (ambientCapturing ? "yes" : "no") + ")");
+        " (cycles: " + ambientCycleCount + ", speech: " + ambientSpeechCount + ")");
+      Serial.printf("VAD: floor=%.1fdB threshold=%.1fdB calibrated=%s\n",
+        vadNoiseFloorDb, vadThresholdDb, vadCalibrationCount >= VAD_CALIBRATION_CYCLES ? "yes" : "no");
       continue;
     }
 
