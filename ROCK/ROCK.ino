@@ -15,7 +15,19 @@
 #include "gallery_bitmaps.h"
 #include "maddi_logo.h"
 
+// ── YAMNet on-device audio classification ──
+#include <Chirale_TensorFlowLite.h>
+#include <tensorflow/lite/micro/all_ops_resolver.h>
+#include <tensorflow/lite/micro/micro_interpreter.h>
+#include <tensorflow/lite/schema/schema_generated.h>
+#include "yamnet_model_data.h"
+#include "audio_classifier.h"
+
 namespace {
+
+// Forward declarations
+void initYamnet();
+bool classifyAudioOnDevice();
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
 constexpr char DEFAULT_WIFI_SSID[] = "caroline";
@@ -99,6 +111,17 @@ Preferences preferences;
 I2SClass microphoneI2S;
 Adafruit_DRV2605 drv;
 Adafruit_MPU6050 mpu;
+
+// ── YAMNet TFLite inference ──
+constexpr int YAMNET_ARENA_SIZE = 300 * 1024;  // 300KB tensor arena (allocated in PSRAM)
+uint8_t* yamnetArena = nullptr;
+tflite::MicroInterpreter* yamnetInterpreter = nullptr;
+TfLiteTensor* yamnetInput = nullptr;
+TfLiteTensor* yamnetOutput = nullptr;
+bool yamnetReady = false;
+AudioClassResult lastClassification = {};
+String lastEnvironmentLabel = "unknown";
+String lastAmbientEvents = "";
 
 String wifiSsid = DEFAULT_WIFI_SSID;
 String wifiPassword = DEFAULT_WIFI_PASSWORD;
@@ -1606,6 +1629,14 @@ void maddiIngest() {
   }
   http.addHeader("X-Motion-State", motionState);
 
+  // Send on-device YAMNet classification results
+  if (yamnetReady && lastClassification.confidence > 0) {
+    http.addHeader("X-Environment-Class", lastEnvironmentLabel);
+    http.addHeader("X-Ambient-Events", lastAmbientEvents);
+    http.addHeader("X-YAMNet-Label", String(lastClassification.label));
+    http.addHeader("X-YAMNet-Confidence", String(lastClassification.confidence, 2));
+  }
+
   // Send audio energy level for environment context
   {
     const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
@@ -1964,6 +1995,9 @@ void processAmbientStateMachine() {
         Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Sending #%u...\n",
           reason, durationS, recordedBytes, ambientSpeechCount);
 
+        // Run on-device YAMNet classification before sending
+        classifyAudioOnDevice();
+
         statusLine = String("CTX ") + ambientSpeechCount;
         renderStatusOnly();
 
@@ -2123,6 +2157,146 @@ void processButtonDiagnostics() {
   Serial.println(buttonStablePressed ? "PRESSED" : "released");
 }
 
+// ── YAMNet initialization ──
+void initYamnet() {
+  if (yamnetReady) return;  // already initialized
+
+  Serial.println("[YAMNet] Initializing TFLite Micro...");
+
+  // Allocate tensor arena in PSRAM
+  if (!yamnetArena) {
+    yamnetArena = (uint8_t*)heap_caps_malloc(YAMNET_ARENA_SIZE, MALLOC_CAP_SPIRAM);
+  }
+  if (!yamnetArena) {
+    Serial.println("[YAMNet] PSRAM arena allocation failed!");
+    return;
+  }
+  Serial.printf("[YAMNet] Arena allocated: %d KB in PSRAM\n", YAMNET_ARENA_SIZE / 1024);
+
+  // Load model
+  const tflite::Model* model = tflite::GetModel(YAMNET_MODEL_DATA);
+  if (model->version() != TFLITE_SCHEMA_VERSION) {
+    Serial.printf("[YAMNet] Model schema version mismatch: %lu vs %d\n",
+      model->version(), TFLITE_SCHEMA_VERSION);
+    return;
+  }
+
+  // Register all ops — will narrow down once we know which ones the model uses
+  static tflite::AllOpsResolver resolver;
+
+  // Create interpreter
+  static tflite::MicroInterpreter staticInterpreter(
+    model, resolver, yamnetArena, YAMNET_ARENA_SIZE);
+  yamnetInterpreter = &staticInterpreter;
+
+  TfLiteStatus allocStatus = yamnetInterpreter->AllocateTensors();
+  if (allocStatus != kTfLiteOk) {
+    Serial.println("[YAMNet] AllocateTensors() failed!");
+    yamnetInterpreter = nullptr;
+    return;
+  }
+
+  yamnetInput = yamnetInterpreter->input(0);
+  yamnetOutput = yamnetInterpreter->output(0);
+
+  Serial.printf("[YAMNet] Ready! Input: [%d,%d,%d,%d] type=%d, Output: [%d,%d] type=%d\n",
+    yamnetInput->dims->data[0], yamnetInput->dims->data[1],
+    yamnetInput->dims->data[2], yamnetInput->dims->data[3],
+    yamnetInput->type,
+    yamnetOutput->dims->data[0], yamnetOutput->dims->data[1],
+    yamnetOutput->type);
+  Serial.printf("[YAMNet] Arena used: %d of %d bytes\n",
+    yamnetInterpreter->arena_used_bytes(), YAMNET_ARENA_SIZE);
+
+  // Init mel filterbank
+  initMelFilterbank();
+  yamnetReady = true;
+}
+
+// ── Run YAMNet classification on recorded audio ──
+bool classifyAudioOnDevice() {
+  if (!yamnetReady || !yamnetInterpreter || audioBuffer == nullptr) return false;
+
+  const int16_t* pcm = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
+  const int numSamples = recordedBytes / sizeof(int16_t);
+
+  if (numSamples < MEL_AUDIO_SAMPLES) {
+    Serial.printf("[YAMNet] Audio too short for classification (%d < %d samples)\n",
+      numSamples, MEL_AUDIO_SAMPLES);
+    return false;
+  }
+
+  // Get input quantization params
+  float inputScale = yamnetInput->params.scale;
+  int inputZeroPoint = yamnetInput->params.zero_point;
+
+  // Compute mel spectrogram directly into input tensor
+  unsigned long t0 = millis();
+  bool ok = computeMelSpectrogram(pcm, numSamples, yamnetInput->data.int8, inputScale, inputZeroPoint);
+  unsigned long melTime = millis() - t0;
+
+  if (!ok) {
+    Serial.println("[YAMNet] Mel spectrogram computation failed");
+    return false;
+  }
+
+  // Run inference
+  t0 = millis();
+  TfLiteStatus status = yamnetInterpreter->Invoke();
+  unsigned long inferTime = millis() - t0;
+
+  if (status != kTfLiteOk) {
+    Serial.println("[YAMNet] Inference failed!");
+    return false;
+  }
+
+  // Process output — handle both float32 and int8 output types
+  if (yamnetOutput->type == kTfLiteFloat32) {
+    // Float32 output — read directly
+    const float* scores = yamnetOutput->data.f;
+    int topIdx[3] = {0, 0, 0};
+    float topScores[3] = {-1, -1, -1};
+    for (int t = 0; t < 3; t++) {
+      for (int i = 0; i < NUM_CLASSES; i++) {
+        bool already = false;
+        for (int j = 0; j < t; j++) if (topIdx[j] == i) { already = true; break; }
+        if (!already && scores[i] > topScores[t]) {
+          topScores[t] = scores[i];
+          topIdx[t] = i;
+        }
+      }
+    }
+    lastClassification.classIndex = topIdx[0];
+    lastClassification.label = ESC10_LABELS[topIdx[0]];
+    lastClassification.category = ESC10_CATEGORIES[topIdx[0]];
+    lastClassification.confidence = topScores[0];
+    for (int i = 0; i < 3; i++) {
+      lastClassification.labels[i] = ESC10_LABELS[topIdx[i]];
+      lastClassification.scores[i] = topScores[i];
+    }
+  } else {
+    // Int8 output — dequantize
+    float outputScale = yamnetOutput->params.scale;
+    int outputZeroPoint = yamnetOutput->params.zero_point;
+    lastClassification = processClassificationOutput(
+      yamnetOutput->data.int8, outputScale, outputZeroPoint);
+  }
+
+  lastEnvironmentLabel = lastClassification.category;
+  lastAmbientEvents = String(lastClassification.labels[0]) + ", " +
+                       lastClassification.labels[1] + ", " +
+                       lastClassification.labels[2];
+
+  Serial.printf("[YAMNet] %s (%s) %.0f%% in %lums (mel: %lums, infer: %lums) | %s %.0f%%, %s %.0f%%\n",
+    lastClassification.label, lastClassification.category,
+    lastClassification.confidence * 100,
+    melTime + inferTime, melTime, inferTime,
+    lastClassification.labels[1], lastClassification.scores[1] * 100,
+    lastClassification.labels[2], lastClassification.scores[2] * 100);
+
+  return true;
+}
+
 void initializeSystem() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(POT_PIN, INPUT);
@@ -2162,6 +2336,8 @@ void initializeSystem() {
     runHardwareSelfTest();
     lastSensorMonitorMs = millis();
   }
+
+  initYamnet();
 
   if (loadConfig()) {
     configReceived = validateConfig();
