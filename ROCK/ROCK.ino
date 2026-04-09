@@ -60,13 +60,19 @@ constexpr uint32_t I2C_CLOCK_HZ = 50000;
 
 constexpr uint32_t SAMPLE_RATE = 16000;
 constexpr uint16_t WAV_HEADER_SIZE = 44;
-constexpr uint32_t MAX_RECORD_SECONDS = 5;
-constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;
+constexpr uint32_t MAX_RECORD_SECONDS = 20;
+constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 640KB in PSRAM
 constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
 constexpr unsigned long SENSOR_MONITOR_INTERVAL_MS = 1000;
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
 constexpr uint32_t CAPTION_RECORD_MS = 4000;
 constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 250;
+
+// Ambient context capture — always-on pipeline
+constexpr uint32_t AMBIENT_RECORD_MS = 20000;    // 20 seconds of recording
+constexpr uint32_t AMBIENT_PAUSE_MS = 5000;       // 5 seconds between captures
+constexpr uint32_t CONSULT_RECORD_SECONDS = 5;    // button-hold still limited to 5s
+constexpr size_t CONSULT_MAX_AUDIO = SAMPLE_RATE * 2 * CONSULT_RECORD_SECONDS;
 constexpr unsigned long CAPTION_LOOP_GAP_MS = 500;
 constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
 constexpr bool ENABLE_HAPTIC = true;
@@ -117,14 +123,21 @@ bool drvLibraryReady = false;
 uint8_t drvI2cAddress = 0;
 uint8_t mpuI2cAddress = 0;
 
-EXT_RAM_BSS_ATTR uint8_t audioBufferStorage[MAX_AUDIO_BYTES + WAV_HEADER_SIZE];
-uint8_t* audioBuffer = audioBufferStorage;
+// Audio buffer allocated from PSRAM at boot (640KB + WAV header for 20s recording)
+uint8_t* audioBuffer = nullptr;
 size_t recordedBytes = 0;
 unsigned long recordStartMs = 0;
 unsigned long lastSensorMonitorMs = 0;
 unsigned long lastButtonRawChangeMs = 0;
 unsigned long nextCaptionLoopMs = 0;
 uint8_t resultGalleryStep = 0;
+
+// Ambient capture state
+bool ambientCaptureEnabled = true;
+bool ambientCapturing = false;
+unsigned long ambientNextCaptureMs = 0;
+unsigned long ambientCaptureStartMs = 0;
+uint32_t ambientCycleCount = 0;
 
 String statusLine = "BOOT";
 String captionUser;
@@ -1040,11 +1053,16 @@ void printSensorSnapshot(bool includeMic) {
 }
 
 void ensureAudioBuffer() {
-  static bool reported = false;
-  if (reported) return;
-  reported = true;
-  Serial.printf("[Mic] Static audio buffer ready for %u bytes\n",
-    static_cast<unsigned>(MAX_AUDIO_BYTES + WAV_HEADER_SIZE));
+  if (audioBuffer != nullptr) return;
+  const size_t bufSize = MAX_AUDIO_BYTES + WAV_HEADER_SIZE;
+  audioBuffer = reinterpret_cast<uint8_t*>(heap_caps_malloc(bufSize, MALLOC_CAP_SPIRAM));
+  if (audioBuffer) {
+    Serial.printf("[Mic] PSRAM audio buffer allocated: %u bytes\n",
+      static_cast<unsigned>(bufSize));
+  } else {
+    Serial.printf("[Mic] PSRAM audio buffer FAILED (%u bytes)\n",
+      static_cast<unsigned>(bufSize));
+  }
 }
 
 bool captureRecordedAudioSnapshot(MicrophoneSnapshot& snapshot) {
@@ -1180,7 +1198,9 @@ void beginRecording() {
 void captureAudioLoop() {
   if (!recording) return;
 
-  const size_t remaining = MAX_AUDIO_BYTES - recordedBytes;
+  // Button-hold recordings cap at 5s (CONSULT_MAX_AUDIO), not 20s
+  const size_t maxBytes = CONSULT_MAX_AUDIO;
+  const size_t remaining = maxBytes - recordedBytes;
   if (remaining == 0) {
     recording = false;
     return;
@@ -1194,8 +1214,8 @@ void captureAudioLoop() {
     recordedBytes += bytesRead;
   }
 
-  if (recordedBytes >= MAX_AUDIO_BYTES ||
-      millis() - recordStartMs >= MAX_RECORD_SECONDS * 1000UL) {
+  if (recordedBytes >= maxBytes ||
+      millis() - recordStartMs >= CONSULT_RECORD_SECONDS * 1000UL) {
     recording = false;
   }
 }
@@ -1678,6 +1698,84 @@ void renderMaddiResult() {
   } while (display.nextPage());
 }
 
+// ─── Ambient context capture ────────────────────────────────────────
+// Records 20s of ambient audio, sends to /ingest-audio for T1 storage.
+// Runs continuously when idle. Button press interrupts for consultation.
+
+void startAmbientCapture() {
+  if (!wifiConnected || supabaseUrl.isEmpty() || deviceApiKey.isEmpty()) return;
+  if (appState != STATE_IDLE) return;
+
+  ensureAudioBuffer();
+  recordedBytes = 0;
+  if (audioBuffer == nullptr) return;
+
+  if (!initMicrophone()) {
+    Serial.println("[Ambient] Mic init failed");
+    return;
+  }
+
+  ambientCapturing = true;
+  ambientCaptureStartMs = millis();
+  Serial.printf("[Ambient] Capture #%u started (20s)\n", ambientCycleCount + 1);
+}
+
+void stopAmbientCapture() {
+  if (!ambientCapturing) return;
+  ambientCapturing = false;
+  stopMicrophone();
+  writeWavHeader(audioBuffer, recordedBytes);
+}
+
+void processAmbientCapture() {
+  if (!ambientCapturing) return;
+
+  // Check if button was pressed — abort ambient, let button handler take over
+  if (buttonStablePressed) {
+    Serial.println("[Ambient] Interrupted by button press");
+    stopAmbientCapture();
+    recordedBytes = 0;
+    return;
+  }
+
+  // Capture audio chunk
+  const size_t remaining = MAX_AUDIO_BYTES - recordedBytes;
+  if (remaining > 0) {
+    const size_t bytesToRead = min<size_t>(AUDIO_CHUNK_SIZE, remaining);
+    size_t bytesRead = microphoneI2S.readBytes(
+      reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes),
+      bytesToRead);
+    if (bytesRead > 0) {
+      recordedBytes += bytesRead;
+    }
+  }
+
+  // Check if 20s elapsed or buffer full
+  if (millis() - ambientCaptureStartMs >= AMBIENT_RECORD_MS ||
+      recordedBytes >= MAX_AUDIO_BYTES) {
+    stopAmbientCapture();
+
+    if (recordedBytes > SAMPLE_RATE * 2) {  // at least 0.5s of audio
+      ambientCycleCount++;
+      Serial.printf("[Ambient] Captured %u bytes, sending to /ingest-audio\n", recordedBytes);
+
+      // Show brief status on display (partial update)
+      statusLine = String("CTX #") + ambientCycleCount;
+      renderStatusOnly();
+
+      maddiIngest();  // send to /ingest-audio for T1 storage
+
+      statusLine = "READY";
+      renderStatusOnly();
+    } else {
+      Serial.println("[Ambient] Too little audio, skipping");
+    }
+
+    // Schedule next capture
+    ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
+  }
+}
+
 void processRecording() {
   if (recordedBytes == 0) {
     Serial.println("[Mic] No audio captured during hold-to-speak");
@@ -1975,6 +2073,8 @@ void processSerialCommands() {
       Serial.println("Supabase URL: " + (supabaseUrl.isEmpty() ? "(not set)" : supabaseUrl));
       Serial.println("Device Key: " + (deviceApiKey.isEmpty() ? "(not set)" : "****" + deviceApiKey.substring(deviceApiKey.length() - 4)));
       Serial.println("Pipeline: " + String(USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() ? "MADDI" : "LEGACY"));
+      Serial.println("Ambient: " + String(ambientCaptureEnabled ? "ON" : "OFF") +
+        " (cycles: " + ambientCycleCount + ", capturing: " + (ambientCapturing ? "yes" : "no") + ")");
       continue;
     }
 
@@ -2038,6 +2138,23 @@ void processSerialCommands() {
       continue;
     }
 
+    if (line == "AMBIENT ON") {
+      ambientCaptureEnabled = true;
+      ambientNextCaptureMs = millis();
+      Serial.println("[Ambient] Context capture ON (20s record, 5s pause)");
+      continue;
+    }
+
+    if (line == "AMBIENT OFF") {
+      ambientCaptureEnabled = false;
+      if (ambientCapturing) {
+        stopAmbientCapture();
+        recordedBytes = 0;
+      }
+      Serial.printf("[Ambient] Context capture OFF (captured %u cycles)\n", ambientCycleCount);
+      continue;
+    }
+
     if (line == "MIC LEFT") {
       micUseRightChannel = false;
       Serial.println("[Mic] Channel set to LEFT");
@@ -2063,6 +2180,8 @@ void processSerialCommands() {
       Serial.println("CAPTION         record 3.5s, caption, then AI reply");
       Serial.println("CAPTION ON      loop mic capture -> caption -> AI");
       Serial.println("CAPTION OFF     stop the Deepgram loop");
+      Serial.println("AMBIENT ON      enable always-on context capture");
+      Serial.println("AMBIENT OFF     disable always-on context capture");
       Serial.println("MIC LEFT        use left I2S channel");
       Serial.println("MIC RIGHT       use right I2S channel");
       Serial.println("PROMPT          print stored/effective system prompt");
@@ -2137,6 +2256,12 @@ void loop() {
       !buttonWasPressed &&
       !captionLoopEnabled &&
       appState == STATE_IDLE) {
+    // Interrupt ambient capture if running
+    if (ambientCapturing) {
+      Serial.println("[Button] Interrupting ambient capture for consultation");
+      stopAmbientCapture();
+      recordedBytes = 0;
+    }
     Serial.println("[Button] Press detected, starting recording");
     beginRecording();
   }
@@ -2153,6 +2278,24 @@ void loop() {
     processRecording();
   }
 
+  // ─── Ambient context capture loop ───
+  // When idle + Maddi pipeline configured + not recording:
+  // cycle between 20s capture and 5s pause
+  if (ambientCaptureEnabled &&
+      USE_MADDI_PIPELINE &&
+      !supabaseUrl.isEmpty() &&
+      wifiConnected &&
+      appState == STATE_IDLE &&
+      !recording &&
+      !captionLoopEnabled) {
+
+    if (ambientCapturing) {
+      processAmbientCapture();
+    } else if (millis() >= ambientNextCaptureMs) {
+      startAmbientCapture();
+    }
+  }
+
   buttonWasPressed = buttonPressed;
-  delay(recording ? 1 : 10);
+  delay(ambientCapturing ? 1 : (recording ? 1 : 10));
 }
