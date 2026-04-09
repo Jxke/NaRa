@@ -1604,8 +1604,19 @@ void maddiIngest() {
   }
   http.addHeader("X-Motion-State", motionState);
 
-  Serial.printf("[Maddi:Ingest] POSTing %d bytes to /ingest-audio (motion: %s)\n",
-    recordedBytes + WAV_HEADER_SIZE, motionState.c_str());
+  // Send audio energy level for environment context
+  {
+    const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
+    const size_t count = recordedBytes / sizeof(int16_t);
+    double sumSq = 0;
+    for (size_t i = 0; i < count; i++) { double s = samples[i]; sumSq += s * s; }
+    double rms = sqrt(sumSq / max(count, (size_t)1));
+    if (rms < 1.0) rms = 1.0;
+    float rmsDb = 20.0 * log10(rms / 32768.0);
+    http.addHeader("X-Audio-Rms-Db", String(rmsDb, 1));
+    Serial.printf("[Maddi:Ingest] POSTing %d bytes to /ingest-audio (motion: %s, rms: %.1fdB)\n",
+      recordedBytes + WAV_HEADER_SIZE, motionState.c_str(), rmsDb);
+  }
   const int code = http.POST(audioBuffer, recordedBytes + WAV_HEADER_SIZE);
 
   if (code >= 200 && code < 300) {
