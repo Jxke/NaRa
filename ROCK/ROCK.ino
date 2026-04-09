@@ -68,14 +68,15 @@ constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
 constexpr uint32_t CAPTION_RECORD_MS = 4000;
 constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 250;
 
-// Ambient context capture — always-on pipeline
-// 5s record keeps upload fast (~2s) so button remains responsive.
-// With 5s record + 5s pause = 10s cycle = ~6 captures/min.
-constexpr uint32_t AMBIENT_RECORD_MS = 5000;      // 5 seconds of recording
-constexpr uint32_t AMBIENT_PAUSE_MS = 5000;        // 5 seconds between captures
-constexpr uint32_t CONSULT_RECORD_SECONDS = 5;     // button-hold limited to 5s
+// Ambient context capture — VAD-gated adaptive pipeline
+constexpr uint32_t AMBIENT_MAX_RECORD_MS = 30000;   // 30s hard cap
+constexpr uint32_t AMBIENT_SILENCE_TIMEOUT_MS = 2000; // stop after 2s of silence
+constexpr uint32_t AMBIENT_LISTEN_WINDOW_MS = 5000;  // listen for speech this long before giving up
+constexpr uint32_t AMBIENT_REST_SPEECH_MS = 2000;    // pause after speech captured
+constexpr uint32_t AMBIENT_REST_SILENCE_MS = 10000;  // pause after no speech found
+constexpr uint32_t CONSULT_RECORD_SECONDS = 5;       // button-hold limited to 5s
 constexpr size_t CONSULT_MAX_AUDIO = SAMPLE_RATE * 2 * CONSULT_RECORD_SECONDS;
-constexpr size_t AMBIENT_MAX_AUDIO = SAMPLE_RATE * 2 * (AMBIENT_RECORD_MS / 1000);
+constexpr size_t AMBIENT_MAX_AUDIO = SAMPLE_RATE * 2 * (AMBIENT_MAX_RECORD_MS / 1000);  // 960KB
 constexpr unsigned long CAPTION_LOOP_GAP_MS = 500;
 constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
 constexpr bool ENABLE_HAPTIC = true;
@@ -135,20 +136,36 @@ unsigned long lastButtonRawChangeMs = 0;
 unsigned long nextCaptionLoopMs = 0;
 uint8_t resultGalleryStep = 0;
 
-// Ambient capture state
+// Ambient capture state machine
+enum AmbientState {
+  AMB_IDLE,         // waiting for next listen cycle
+  AMB_LISTENING,    // mic on, waiting for speech onset
+  AMB_RECORDING,    // speech detected, accumulating audio
+  AMB_SENDING,      // uploading to /ingest-audio
+};
+
 bool ambientCaptureEnabled = true;
-bool ambientCapturing = false;
+AmbientState ambientState = AMB_IDLE;
 unsigned long ambientNextCaptureMs = 0;
 unsigned long ambientCaptureStartMs = 0;
+unsigned long ambientLastSpeechMs = 0;   // last time a speech window was detected
+unsigned long ambientListenStartMs = 0;  // when we started listening for speech onset
 uint32_t ambientCycleCount = 0;
-uint32_t ambientSpeechCount = 0;   // cycles that had speech
+uint32_t ambientSpeechCount = 0;
 
 // VAD — energy-based voice activity detection
-constexpr int VAD_CALIBRATION_CYCLES = 5;      // auto-calibrate during first N cycles
-constexpr float VAD_MARGIN_DB = 2.0;           // speech must be this many dB above noise floor
-float vadNoiseFloorDb = -50.0;                 // updated by calibration
-float vadThresholdDb = -28.0;                  // initial fallback, updated by calibration
+// VAD tuning — based on observed INMP441 behavior:
+//   Mic self-noise:  -14 to -15 dBFS (per 100ms window)
+//   Normal speech:   -8 to -10 dBFS
+//   Loud speech:     -5 to -8 dBFS
+// Threshold at -12dB gives ~3dB margin above noise, catches normal speech.
+constexpr float VAD_FIXED_THRESHOLD_DB = -12.0;
+constexpr int VAD_CALIBRATION_CYCLES = 30;     // ~3s of windows for noise floor tracking
+constexpr float VAD_MARGIN_DB = 3.0;           // threshold = max(fixed, floor + margin)
+float vadNoiseFloorDb = -15.0;                 // realistic initial for INMP441
+float vadThresholdDb = VAD_FIXED_THRESHOLD_DB;
 int vadCalibrationCount = 0;
+bool vadCalibrated = false;
 
 String statusLine = "BOOT";
 String captionUser;
@@ -1780,99 +1797,182 @@ bool vadDetectSpeech() {
   return hasSpeech;
 }
 
-// ─── Ambient context capture ────────────────────────────────────────
-// Records 5s of ambient audio, runs VAD, sends to /ingest-audio only if speech detected.
-// Runs continuously when idle. Button press interrupts for consultation.
+// ─── Ambient context capture — VAD-gated adaptive pipeline ──────────
+// State machine:
+//   IDLE → LISTENING (mic on, checking for speech in 100ms windows)
+//   LISTENING → RECORDING (speech window detected, start accumulating)
+//   LISTENING → IDLE (no speech after LISTEN_WINDOW_MS, rest 10s)
+//   RECORDING → SENDING (2s silence or 30s cap → upload)
+//   RECORDING → IDLE (button interrupt)
+//   SENDING → IDLE (rest 2s after speech)
 
-void startAmbientCapture() {
+// Check RMS energy of the most recently captured 100ms window (in-place)
+float vadCheckLastWindow() {
+  const size_t windowSamples = SAMPLE_RATE / 10;  // 1600 samples = 100ms
+  const size_t totalSamples = recordedBytes / sizeof(int16_t);
+  if (totalSamples < windowSamples) return -100.0;
+
+  const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
+  const size_t start = totalSamples - windowSamples;
+
+  double sumSq = 0;
+  for (size_t i = start; i < totalSamples; i++) {
+    double s = static_cast<double>(samples[i]);
+    sumSq += s * s;
+  }
+  double rms = sqrt(sumSq / windowSamples);
+  if (rms < 1.0) rms = 1.0;
+  return 20.0 * log10(rms / 32768.0);
+}
+
+void ambientStartListening() {
   if (!wifiConnected || supabaseUrl.isEmpty() || deviceApiKey.isEmpty()) return;
   if (appState != STATE_IDLE) return;
-  if (buttonStablePressed) return;  // don't start if button is held
+  if (buttonStablePressed) return;
 
   ensureAudioBuffer();
-  recordedBytes = 0;
   if (audioBuffer == nullptr) return;
+  recordedBytes = 0;
 
   if (!initMicrophone()) {
     Serial.println("[Ambient] Mic init failed");
     return;
   }
 
-  ambientCapturing = true;
-  ambientCaptureStartMs = millis();
-  Serial.printf("[Ambient] Capture #%u started (%lums)\n", ambientCycleCount + 1, (unsigned long)AMBIENT_RECORD_MS);
+  ambientState = AMB_LISTENING;
+  ambientListenStartMs = millis();
+  ambientCycleCount++;
 }
 
-void stopAmbientCapture() {
-  if (!ambientCapturing) return;
-  ambientCapturing = false;
+void ambientStop() {
+  if (ambientState == AMB_IDLE) return;
   stopMicrophone();
-  writeWavHeader(audioBuffer, recordedBytes);
+  if (recordedBytes > 0) {
+    writeWavHeader(audioBuffer, recordedBytes);
+  }
+  ambientState = AMB_IDLE;
 }
 
-void processAmbientCapture() {
-  if (!ambientCapturing) return;
-
-  // Check if button was pressed — abort ambient, let button handler take over
-  if (buttonStablePressed) {
+void processAmbientStateMachine() {
+  // Button interrupt — always takes priority
+  if (ambientState != AMB_IDLE && buttonStablePressed) {
     Serial.println("[Ambient] Interrupted by button press");
-    stopAmbientCapture();
+    ambientStop();
     recordedBytes = 0;
-    // Delay next ambient start so button handler has time to take over
     ambientNextCaptureMs = millis() + 10000;
     return;
   }
 
-  // Capture audio chunk (capped at AMBIENT_MAX_AUDIO)
+  if (ambientState == AMB_IDLE) return;
+
+  // ── Capture a 100ms chunk of audio ──
+  const size_t windowBytes = (SAMPLE_RATE / 10) * sizeof(int16_t);  // 3200 bytes = 100ms
   const size_t remaining = AMBIENT_MAX_AUDIO - recordedBytes;
-  if (remaining > 0) {
-    const size_t bytesToRead = min<size_t>(AUDIO_CHUNK_SIZE, remaining);
-    size_t bytesRead = microphoneI2S.readBytes(
-      reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes),
-      bytesToRead);
-    if (bytesRead > 0) {
-      recordedBytes += bytesRead;
+
+  if (remaining >= windowBytes) {
+    size_t totalRead = 0;
+    while (totalRead < windowBytes) {
+      const size_t toRead = min<size_t>(AUDIO_CHUNK_SIZE, windowBytes - totalRead);
+      size_t bytesRead = microphoneI2S.readBytes(
+        reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes + totalRead),
+        toRead);
+      totalRead += bytesRead;
+      if (bytesRead == 0) break;
     }
+    recordedBytes += totalRead;
   }
 
-  // Check if time elapsed or buffer full
-  if (millis() - ambientCaptureStartMs >= AMBIENT_RECORD_MS ||
-      recordedBytes >= AMBIENT_MAX_AUDIO) {
-    stopAmbientCapture();
+  const float windowDb = vadCheckLastWindow();
+  const bool windowHasSpeech = vadCalibrated && (windowDb > vadThresholdDb);
 
-    ambientCycleCount++;
-
-    if (recordedBytes > SAMPLE_RATE * 2) {  // at least 0.5s of audio
-      // Run VAD — only upload if speech detected
-      if (!vadDetectSpeech()) {
-        ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
-        return;
-      }
-
-      // Check button before blocking HTTP call
-      if (digitalRead(BUTTON_PIN) == LOW) {
-        Serial.println("[Ambient] Button pressed before ingest, skipping upload");
-        ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
-        return;
-      }
-
-      ambientSpeechCount++;
-      Serial.printf("[Ambient] Speech detected! Capture #%u (%u/%u with speech), sending %u bytes\n",
-        ambientCycleCount, ambientSpeechCount, ambientCycleCount, recordedBytes);
-
-      statusLine = String("CTX ") + ambientSpeechCount;
-      renderStatusOnly();
-
-      maddiIngest();
-
-      statusLine = "READY";
-      renderStatusOnly();
+  // ── Calibration phase — learn ambient noise level from listening windows ──
+  if (!vadCalibrated && ambientState == AMB_LISTENING) {
+    vadCalibrationCount++;
+    // Running average of window energy as noise floor
+    if (vadCalibrationCount == 1) {
+      vadNoiseFloorDb = windowDb;  // reset from initial -50
     } else {
-      Serial.println("[Ambient] Too little audio, skipping");
+      vadNoiseFloorDb = vadNoiseFloorDb + (windowDb - vadNoiseFloorDb) / vadCalibrationCount;
+    }
+    // Threshold is the higher of: fixed minimum OR calibrated floor + margin
+    float calibratedThreshold = vadNoiseFloorDb + VAD_MARGIN_DB;
+    vadThresholdDb = max(VAD_FIXED_THRESHOLD_DB, calibratedThreshold);
+
+    if (vadCalibrationCount % 10 == 0 || vadCalibrationCount >= VAD_CALIBRATION_CYCLES) {
+      Serial.printf("[VAD] Calibrating %d/%d: window=%.1fdB floor=%.1fdB threshold=%.1fdB\n",
+        vadCalibrationCount, VAD_CALIBRATION_CYCLES, windowDb, vadNoiseFloorDb, vadThresholdDb);
+    }
+    if (vadCalibrationCount >= VAD_CALIBRATION_CYCLES) {
+      vadCalibrated = true;
+      Serial.printf("[VAD] Calibration complete. Noise floor: %.1fdB, Threshold: %.1fdB\n",
+        vadNoiseFloorDb, vadThresholdDb);
+    }
+    return;
+  }
+
+  const unsigned long now = millis();
+
+  // ── LISTENING: waiting for speech onset ──
+  if (ambientState == AMB_LISTENING) {
+    if (windowHasSpeech) {
+      // Speech detected — transition to recording
+      ambientState = AMB_RECORDING;
+      ambientCaptureStartMs = now;
+      ambientLastSpeechMs = now;
+      Serial.printf("[Ambient] Speech onset detected (%.1fdB > %.1fdB), recording...\n",
+        windowDb, vadThresholdDb);
+    } else if (now - ambientListenStartMs >= AMBIENT_LISTEN_WINDOW_MS) {
+      // No speech after listen window — go idle with long rest
+      ambientStop();
+      recordedBytes = 0;
+      ambientNextCaptureMs = now + AMBIENT_REST_SILENCE_MS;
+      // Don't log every silence cycle — too noisy
+    }
+    return;
+  }
+
+  // ── RECORDING: speech in progress, accumulating audio ──
+  if (ambientState == AMB_RECORDING) {
+    if (windowHasSpeech) {
+      ambientLastSpeechMs = now;
     }
 
-    // Schedule next capture
-    ambientNextCaptureMs = millis() + AMBIENT_PAUSE_MS;
+    // Check stop conditions
+    bool silenceTimeout = (now - ambientLastSpeechMs >= AMBIENT_SILENCE_TIMEOUT_MS);
+    bool maxCap = (now - ambientCaptureStartMs >= AMBIENT_MAX_RECORD_MS);
+    bool bufferFull = (recordedBytes >= AMBIENT_MAX_AUDIO);
+
+    if (silenceTimeout || maxCap || bufferFull) {
+      const char* reason = silenceTimeout ? "2s silence" : maxCap ? "30s cap" : "buffer full";
+      float durationS = (now - ambientCaptureStartMs) / 1000.0;
+
+      ambientStop();
+
+      if (recordedBytes > SAMPLE_RATE * 2) {
+        // Check button before HTTP call
+        if (digitalRead(BUTTON_PIN) == LOW) {
+          Serial.println("[Ambient] Button pressed before send, skipping");
+          recordedBytes = 0;
+          ambientNextCaptureMs = now + 10000;
+          return;
+        }
+
+        ambientSpeechCount++;
+        Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Sending #%u...\n",
+          reason, durationS, recordedBytes, ambientSpeechCount);
+
+        statusLine = String("CTX ") + ambientSpeechCount;
+        renderStatusOnly();
+
+        maddiIngest();
+
+        statusLine = "READY";
+        renderStatusOnly();
+      }
+
+      recordedBytes = 0;
+      ambientNextCaptureMs = now + AMBIENT_REST_SPEECH_MS;
+    }
   }
 }
 
@@ -2172,10 +2272,14 @@ void processSerialCommands() {
       Serial.println("Supabase URL: " + (supabaseUrl.isEmpty() ? "(not set)" : supabaseUrl));
       Serial.println("Device Key: " + (deviceApiKey.isEmpty() ? "(not set)" : "****" + deviceApiKey.substring(deviceApiKey.length() - 4)));
       Serial.println("Pipeline: " + String(USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() ? "MADDI" : "LEGACY"));
-      Serial.println("Ambient: " + String(ambientCaptureEnabled ? "ON" : "OFF") +
-        " (cycles: " + ambientCycleCount + ", speech: " + ambientSpeechCount + ")");
-      Serial.printf("VAD: floor=%.1fdB threshold=%.1fdB calibrated=%s\n",
-        vadNoiseFloorDb, vadThresholdDb, vadCalibrationCount >= VAD_CALIBRATION_CYCLES ? "yes" : "no");
+      {
+        const char* stateNames[] = {"idle", "listening", "recording", "sending"};
+        Serial.printf("Ambient: %s state=%s (cycles: %u, speech: %u)\n",
+          ambientCaptureEnabled ? "ON" : "OFF", stateNames[ambientState],
+          ambientCycleCount, ambientSpeechCount);
+        Serial.printf("VAD: floor=%.1fdB threshold=%.1fdB calibrated=%s\n",
+          vadNoiseFloorDb, vadThresholdDb, vadCalibrated ? "yes" : "no");
+      }
       continue;
     }
 
@@ -2242,17 +2346,15 @@ void processSerialCommands() {
     if (line == "AMBIENT ON") {
       ambientCaptureEnabled = true;
       ambientNextCaptureMs = millis();
-      Serial.println("[Ambient] Context capture ON (20s record, 5s pause)");
+      Serial.println("[Ambient] VAD-gated context capture ON");
       continue;
     }
 
     if (line == "AMBIENT OFF") {
       ambientCaptureEnabled = false;
-      if (ambientCapturing) {
-        stopAmbientCapture();
-        recordedBytes = 0;
-      }
-      Serial.printf("[Ambient] Context capture OFF (captured %u cycles)\n", ambientCycleCount);
+      ambientStop();
+      recordedBytes = 0;
+      Serial.printf("[Ambient] Context capture OFF (cycles: %u, speech: %u)\n", ambientCycleCount, ambientSpeechCount);
       continue;
     }
 
@@ -2366,9 +2468,9 @@ void loop() {
       !captionLoopEnabled &&
       appState == STATE_IDLE) {
     // Interrupt ambient capture if running
-    if (ambientCapturing) {
+    if (ambientState != AMB_IDLE) {
       Serial.println("[Button] Interrupting ambient capture for consultation");
-      stopAmbientCapture();
+      ambientStop();
       recordedBytes = 0;
     }
     Serial.println("[Button] Press detected, starting recording");
@@ -2387,9 +2489,7 @@ void loop() {
     processRecording();
   }
 
-  // ─── Ambient context capture loop ───
-  // When idle + Maddi pipeline configured + not recording:
-  // cycle between 20s capture and 5s pause
+  // ─── Ambient context capture — VAD-gated state machine ───
   if (ambientCaptureEnabled &&
       USE_MADDI_PIPELINE &&
       !supabaseUrl.isEmpty() &&
@@ -2398,13 +2498,13 @@ void loop() {
       !recording &&
       !captionLoopEnabled) {
 
-    if (ambientCapturing) {
-      processAmbientCapture();
+    if (ambientState != AMB_IDLE) {
+      processAmbientStateMachine();
     } else if (millis() >= ambientNextCaptureMs) {
-      startAmbientCapture();
+      ambientStartListening();
     }
   }
 
   buttonWasPressed = buttonPressed;
-  delay(ambientCapturing ? 1 : (recording ? 1 : 10));
+  delay((ambientState == AMB_LISTENING || ambientState == AMB_RECORDING) ? 1 : (recording ? 1 : 10));
 }
