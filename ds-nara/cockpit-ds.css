@@ -1,0 +1,97 @@
+/* ─── NaRa DS — PP Mondwest + PP NeueBit, B/W ePaper palette ───────────── */
+
+@font-face {
+  font-family: "PP Mondwest";
+  src: url("/fonts/pp/PPMondwest-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PP NeueBit";
+  src: url("/fonts/pp/PPNeueBit-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Scope-local override: cancel the root Geist fonts so any Tailwind
+   font-mono / font-sans utility inside the NaRa DS resolves to PP. */
+.ds-cockpit-scope {
+  --font-mono: "PP NeueBit", ui-monospace, "IBM Plex Mono", monospace;
+  --font-sans: "PP NeueBit", ui-monospace, "IBM Plex Mono", monospace;
+  --font-geist-mono: "PP NeueBit", ui-monospace, monospace;
+  --font-geist-sans: "PP NeueBit", ui-monospace, monospace;
+}
+
+@keyframes cockpit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cockpit-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes cockpit-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Bitmap spinner — stepped braille cycle, no smooth interpolation */
+@keyframes nara-bitmap-spin {
+  0%   { content: "\2801"; } /* ⠁ */
+  10%  { content: "\2809"; } /* ⠉ */
+  20%  { content: "\2819"; } /* ⠙ */
+  30%  { content: "\2838"; } /* ⠸ */
+  40%  { content: "\2830"; } /* ⠰ */
+  50%  { content: "\2820"; } /* ⠠ */
+  60%  { content: "\2824"; } /* ⠤ */
+  70%  { content: "\2806"; } /* ⠆ */
+  80%  { content: "\2802"; } /* ⠂ */
+  90%  { content: "\2801"; } /* ⠁ */
+  100% { content: "\2801"; } /* ⠁ */
+}
+.nara-bitmap-spinner::before {
+  content: "\2801";
+  display: inline-block;
+  animation: nara-bitmap-spin 1.2s steps(10, end) infinite;
+}
+
+/* Scrollbar — stark black thumb on white, matches ePaper aesthetic */
+.ds-cockpit-scope ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ds-cockpit-scope ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ds-cockpit-scope ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0;
+  border: 2px solid #ffffff;
+}
+.ds-cockpit-scope ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+.ds-cockpit-scope ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+.ds-cockpit-scope {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
