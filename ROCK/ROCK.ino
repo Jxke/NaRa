@@ -51,6 +51,7 @@ constexpr char PRIOR_DEFAULT_SYSTEM_PROMPT[] =
 
 constexpr int BUTTON_PIN = 2;
 constexpr int POT_PIN = 8;
+constexpr int GALLERY_POT_PIN = 3;
 
 constexpr int MIC_WS_PIN = 4;
 constexpr int MIC_SCK_PIN = 5;
@@ -378,6 +379,12 @@ int responseWordLimit() {
   return map(raw, 0, 4095, 12, 80);
 }
 
+uint8_t galleryStepFromPot() {
+  const int raw = analogRead(GALLERY_POT_PIN);
+  const long constrained = constrain(raw, 0, 4095);
+  return static_cast<uint8_t>(map(constrained, 0, 4095, 0, 4));
+}
+
 bool isStrictEmoticonPrompt() {
   if (FORCE_DEFAULT_SYSTEM_PROMPT_MODE) return true;
   String lowered = systemPrompt;
@@ -557,7 +564,8 @@ void renderCenteredBitmap(const uint8_t* bitmap) {
   const int16_t x = (display.width() - GALLERY_BITMAP_LARGE_WIDTH) / 2;
   const int16_t y = (display.height() - GALLERY_BITMAP_LARGE_HEIGHT) / 2;
 
-  display.setFullWindow();
+  // Clear the full panel in partial mode so prior collage pixels don't remain outside the centered image.
+  display.setPartialWindow(0, 0, display.width(), display.height());
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -590,15 +598,16 @@ void updateScreen(const String& newStatus, const String& userText = "", const St
 void renderGlyphCollage() {
   if (!displayReady) return;
 
-  constexpr int16_t TOP_Y = 24;
-  constexpr int16_t BOTTOM_Y = 104;
-  constexpr int16_t LEFT_X = 24;
+  constexpr int16_t TOP_Y = 8;
+  constexpr int16_t BOTTOM_Y = 88;
+  constexpr int16_t LEFT_X = 8;
   constexpr int16_t RIGHT_X = 112;
-  constexpr int16_t CENTER_X = 68;
+  constexpr int16_t CENTER_X = 60;
   constexpr int16_t LABEL_Y = 194;
   constexpr char LABEL_TEXT[] = "SELF-MASTERY";
 
-  display.setFullWindow();
+  // This view spans nearly the whole panel, but partial mode is still faster than a full refresh.
+  display.setPartialWindow(0, 0, display.width(), display.height());
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -618,16 +627,16 @@ void renderGlyphCollage() {
 void renderResultGalleryStep() {
   switch (resultGalleryStep) {
     case 0:
-      renderCenteredBitmap(TREE_BITMAP_LARGE);
+      renderGlyphCollage();
       break;
     case 1:
-      renderCenteredBitmap(BUTTERFLY_BITMAP_LARGE);
+      renderCenteredBitmap(TREE_BITMAP_LARGE);
       break;
     case 2:
-      renderCenteredBitmap(FLOWER_BITMAP_LARGE);
+      renderCenteredBitmap(BUTTERFLY_BITMAP_LARGE);
       break;
     default:
-      renderGlyphCollage();
+      renderCenteredBitmap(FLOWER_BITMAP_LARGE);
       break;
   }
 }
@@ -638,11 +647,14 @@ void startResultGallery() {
   renderResultGalleryStep();
 }
 
-void advanceResultGallery() {
+void updateResultGalleryFromPot() {
   if (appState != STATE_SHOWING_RESULT) return;
 
-  if (resultGalleryStep < 3) {
-    ++resultGalleryStep;
+  const uint8_t nextStep = galleryStepFromPot();
+  if (nextStep == resultGalleryStep) return;
+
+  if (nextStep < 4) {
+    resultGalleryStep = nextStep;
     renderResultGalleryStep();
     return;
   }
@@ -2300,6 +2312,7 @@ bool classifyAudioOnDevice() {
 void initializeSystem() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(POT_PIN, INPUT);
+  pinMode(GALLERY_POT_PIN, INPUT);
   ensureAudioBuffer();
   printHardwareSummary();
   WiFi.onEvent(onWiFiEvent);
@@ -2646,6 +2659,10 @@ void loop() {
     return;
   }
 
+  if (appState == STATE_SHOWING_RESULT) {
+    updateResultGalleryFromPot();
+  }
+
   const bool buttonPressed = buttonStablePressed;
 
   if (!ENABLE_BUTTON_PTT) {
@@ -2654,19 +2671,17 @@ void loop() {
     return;
   }
 
+  // Maddi dismiss-on-button: if a result is showing in Maddi pipeline mode,
+  // a button press returns to idle. Gallery scrolling is pot-driven now
+  // (see updateResultGalleryFromPot above), so the button is free for this.
   if (buttonPressed &&
       !buttonWasPressed &&
-      appState == STATE_SHOWING_RESULT) {
-    if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty()) {
-      // Maddi mode: button on result → back to idle (no old gallery)
-      Serial.println("[Button] Dismissing Maddi result, returning to idle");
-      updateScreen("READY", captionUser, captionAssistant, true);
-      appState = STATE_IDLE;
-    } else {
-      // Legacy mode: cycle through glyph gallery
-      Serial.println("[Button] Press detected, advancing result gallery");
-      advanceResultGallery();
-    }
+      appState == STATE_SHOWING_RESULT &&
+      USE_MADDI_PIPELINE &&
+      !supabaseUrl.isEmpty()) {
+    Serial.println("[Button] Dismissing Maddi result, returning to idle");
+    updateScreen("READY", captionUser, captionAssistant, true);
+    appState = STATE_IDLE;
   } else if (buttonPressed &&
       !buttonWasPressed &&
       !captionLoopEnabled &&

@@ -39,7 +39,7 @@ The temporary `DAZI-AI` import used during early integration has been removed; t
   - configured as `INPUT_PULLUP`
   - idle = `HIGH`, pressed = `LOW`
 - Potentiometer
-  - `GPIO8`
+  - `GPIO3`
 
 If any wiring changes, update the pin constants at the top of `ROCK/ROCK.ino`.
 
@@ -105,7 +105,7 @@ Helper script:
 ./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -OpenAIApiKey "YOUR_OPENAI_KEY"
 ```
 
-Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO8` scales the reply length target.
+Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO3` scrolls the post-reply gallery.
 
 Current interaction model:
 
@@ -113,12 +113,12 @@ Current interaction model:
 - release the button to stop recording
 - firmware then runs `Deepgram -> OpenAI`
 - the e-paper first displays the transcript in `USER` and the reply in `AI`
-- after a successful reply, the screen enters a button-driven gallery:
-  - first view: centered `TREE` at `128x128`
-  - press 1: centered `BUTTERFLY` at `128x128`
-  - press 2: centered `FLOWER` at `128x128`
-  - press 3: 3-glyph `64x64` collage with centered `SELF-MASTERY`
-  - press 4: returns to the normal `READY` screen so the next press can record again
+- after a successful reply, the screen enters a potentiometer-driven gallery on `GPIO3`:
+  - position 1: centered `TREE` at `128x128`
+  - position 2: centered `BUTTERFLY` at `128x128`
+  - position 3: centered `FLOWER` at `128x128`
+  - position 4: 3-glyph `64x64` collage with centered `SELF-MASTERY`
+  - position 5: returns to the normal `READY` screen so the next button press can record again
 
 ## Serial Test Mode
 
@@ -167,7 +167,7 @@ TEST:Say hello from the OpenAI test path
 ```
 
 This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
-It also enters the same post-reply glyph gallery sequence that button-based recordings use.
+It also enters the same post-reply glyph gallery sequence that potentiometer-controlled recordings use.
 
 Notes:
 
@@ -200,7 +200,7 @@ Installed during integration:
   - `WiFi:` / `POT:` row
   - `USER`
   - `AI`
-- After a successful reply, the button cycles a glyph gallery:
+- After a successful reply, the potentiometer on `GPIO3` cycles a glyph gallery:
   - `TREE` `128x128`
   - `BUTTERFLY` `128x128`
   - `FLOWER` `128x128`
