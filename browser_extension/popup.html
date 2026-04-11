@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nara</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Guardrail Layer</p>
+          <h1>Nara</h1>
+        </div>
+        <button id="clearBadgeButton" class="ghost-button">Clear badge</button>
+      </header>
+
+      <nav class="tabs" aria-label="Extension sections">
+        <button class="tab is-active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="activity">Activity</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <section id="overview" class="panel is-active">
+        <div class="metric-card">
+          <span class="metric-icon">◌</span>
+          <div>
+            <p class="metric-label">Total interventions</p>
+            <p id="totalInterventions" class="metric-value">0</p>
+          </div>
+        </div>
+
+        <p id="weeklySummary" class="weekly-summary">0 interventions this week</p>
+
+        <div class="stats-grid">
+          <article class="stat">
+            <p class="stat-label">Personal</p>
+            <p id="personalCount" class="stat-value">0</p>
+          </article>
+          <article class="stat">
+            <p class="stat-label">Anthropomorphization</p>
+            <p id="anthroCount" class="stat-value">0</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="activity" class="panel">
+        <div id="activityList" class="activity-list"></div>
+      </section>
+
+      <section id="settings" class="panel">
+        <label class="setting-row">
+          <div>
+            <p class="setting-title">Personal question detection</p>
+            <p class="setting-copy">Flags emotional, relational, or mental-health leaning prompts.</p>
+          </div>
+          <input id="personalToggle" type="checkbox" />
+        </label>
+
+        <label class="setting-row">
+          <div>
+            <p class="setting-title">Anthropomorphization detection</p>
+            <p class="setting-copy">Flags human-like attachment language aimed at the chatbot.</p>
+          </div>
+          <input id="anthroToggle" type="checkbox" />
+        </label>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
