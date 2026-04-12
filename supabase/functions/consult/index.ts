@@ -44,19 +44,27 @@ const REQUIRED_GLYPH_COUNT = 3;
 // ---------------------------------------------------------------------------
 
 const REASONER_SYSTEM_PROMPT =
-  "You are an introspective analyst. Given a person's recent context " +
-  "(what they've said, their emotional patterns, their environment, " +
-  "their long-term themes) and their current question, produce a " +
+  "You are a thoughtful analyst of human situations. " +
+  "Given recent context and the user's spoken query, provide a concise but " +
   "thoughtful analysis of their situation. Think about what's really " +
   "going on beneath the surface. What tensions exist? What might they " +
-  "be avoiding? What patterns are repeating? Your analysis will be used " +
+  "be avoiding? What patterns are repeating? Notice the emotional state, " +
+  "the core tension, and the directional pull within the situation without " +
+  "forcing it into a rigid structure. Your analysis will be used " +
   "to select symbolic glyphs \u2014 do NOT mention glyphs, symbols, or the " +
   "selection process. Just analyze the human situation.";
 
 const PICKER_SYSTEM_PROMPT =
   "You select 3 glyphs and 1 word for a wearable device. " +
-  "Given an analysis, pick glyphs forming a narrative arc: " +
-  "setup (context), tension (challenge), resolution (direction). " +
+  "Given an analysis, pick glyphs that feel meaningful together rather than " +
+  "individually. The trio should suggest progression or shift, include some " +
+  "tension or contrast, avoid redundancy, and feel like it leads somewhere " +
+  "toward movement, possibility, or change. Do NOT assign fixed roles to " +
+  "individual glyphs. Each glyph carries an underlying reflective prompt. " +
+  "The final word must be derived from the combined meaning of the three " +
+  "selected prompts, not from any single glyph alone. The word should not " +
+  "be a synonym of one glyph; it should feel open-ended, directional, and " +
+  "emergent from the trio as a whole. " +
   "Pick 1 companion word (max 15 chars, lowercase). " +
   "You MUST respond with ONLY this exact JSON format, nothing else:\n" +
   '{"glyphs": ["id1", "id2", "id3"], "word": "yourword"}\n' +
@@ -68,9 +76,9 @@ const PICKER_SYSTEM_PROMPT =
 
 interface GlyphRow {
   id: string;
-  labels: string[];
   tags: string[];
   interpretations: string[];
+  prompt_questions: string[];
 }
 
 interface PickerResult {
@@ -305,7 +313,8 @@ function formatGlyphInventory(glyphs: GlyphRow[]): string {
   return glyphs
     .map((g) => {
       const interps = g.interpretations.slice(0, 3).join("; ");
-      return `${g.id}: labels=[${g.labels.join(", ")}] tags=[${g.tags.join(", ")}] interpretations=[${interps}]`;
+      const prompts = g.prompt_questions.slice(0, 3).join("; ");
+      return `${g.id}: tags=[${g.tags.join(", ")}] interpretations=[${interps}] prompt_questions=[${prompts}]`;
     })
     .join("\n");
 }
@@ -464,7 +473,7 @@ serve(async (req: Request) => {
       fetchContext(deviceId),
       supabase
         .from("glyphs")
-        .select("id, labels, tags, interpretations"),
+        .select("id, tags, interpretations, prompt_questions"),
     ]);
 
     contextBlock = context;

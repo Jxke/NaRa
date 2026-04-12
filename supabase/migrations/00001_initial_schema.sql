@@ -104,16 +104,15 @@ create table if not exists public.consultations (
 comment on table public.consultations is 'Records of glyph consultations: query, selected glyphs, word, and reasoning.';
 
 -- ============================================================================
--- glyphs — the 22 symbolic glyphs (shared, read-only for users)
+-- glyphs — the symbolic glyph library (shared, read-only for users)
 -- ============================================================================
 create table if not exists public.glyphs (
   id              text primary key,
-  labels          text[] not null default '{}',
   tags            text[] not null default '{}',
   interpretations text[] not null default '{}',
-  stories         text[] not null default '{}',
+  prompt_questions text[] not null default '{}',
   bitmap_url      text,
   created_at      timestamptz not null default now()
 );
 
-comment on table public.glyphs is 'The 22 archetypal glyphs. Shared across all users, read-only.';
+comment on table public.glyphs is 'The shared NaRa glyph library. Shared across all users, read-only.';

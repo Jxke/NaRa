@@ -40,11 +40,12 @@ This section supersedes older notes below when they conflict.
   - `WiFi:` / `POT:` row
   - `USER` section
   - `AI` section
-- After a successful reply, the display enters a potentiometer-driven glyph gallery:
-  - `TREE` at `128x128`
-  - `BUTTERFLY` at `128x128`
-  - `FLOWER` at `128x128`
-  - a final 3-glyph collage with `SELF-MASTERY` centered at the bottom
+- The active consult path now prefers the Supabase-backed glyph pipeline when `USE_MADDI_PIPELINE = true`.
+  - firmware posts recorded WAV audio to `/consult`
+  - the backend returns exactly 3 glyph IDs plus 1 companion word
+  - firmware stores those in `consultGlyphIds[3]` and `consultWord`
+  - the final e-ink consult screen renders the word at the top, two glyph bitmaps on the upper row, one centered below, and `NARA` as the footer label
+- The old potentiometer gallery path still exists in the codebase, but the consult result path is now a separate bitmap-driven layout rather than text-only glyph IDs.
 - The potentiometer is on `GPIO3`. It now controls gallery selection after a successful reply.
 - A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
 - Serial helpers worth remembering:
@@ -62,6 +63,14 @@ This section supersedes older notes below when they conflict.
   - `/dev/cu.usbmodem1424101`
   - `/dev/cu.usbmodem21101`
 - Recent prompt work focused on getting OpenAI replies to be a single emoticon / ASCII emoticon. If future behavior seems inconsistent, inspect the active prompt and the reply post-processing path before assuming the model is ignoring instructions.
+- Backend glyph selection now uses a two-stage prompt flow in [index.ts](/Users/carolinehana/ROCK/supabase/functions/consult/index.ts):
+  - `REASONER_SYSTEM_PROMPT` extracts the human situation with emphasis on emotional state, core tension, and directional pull
+  - `PICKER_SYSTEM_PROMPT` selects 3 glyphs as a meaningful trio and derives the final word from the combined meaning of their reflective prompts
+- The glyph schema has moved from `stories` to `prompt_questions`, and `labels` were removed.
+- The current glyph dataset is 42 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
+- Firmware bitmap assets for consult glyphs are generated into [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) from `glyphs/*.bmp` using [generate_consult_glyph_header.js](/Users/carolinehana/ROCK/scripts/generate_consult_glyph_header.js).
+- Local visual reference for the consult result screen lives at [consult_preview.html](/Users/carolinehana/ROCK/consult_preview.html).
+- Visible product naming on the consult result screen is now `NARA`, but some internal identifiers and comments still use historical `Maddi` names. Treat those as implementation legacy unless a broader rename is intentionally requested.
 
 ## Purpose
 
@@ -123,6 +132,7 @@ Pin mapping:
   - captions
   - short assistant replies
   - post-reply glyph gallery screens
+  - consult result screen with 3 bitmap glyphs + companion word
 - A serial `TEST:` path was added so OpenAI/display behavior can be tested without a microphone.
 
 ## Credentials Context
@@ -143,7 +153,10 @@ These credentials should not be duplicated in committed source files. They are i
 - Flash helper: [scripts/flash.ps1](/Users/carolinehana/ROCK/scripts/flash.ps1)
 - Provisioning helper: [scripts/provision.ps1](/Users/carolinehana/ROCK/scripts/provision.ps1)
 - Bitmap conversion helper: [scripts/convert_to_8bit_bmp.swift](/Users/carolinehana/ROCK/scripts/convert_to_8bit_bmp.swift)
+- Consult glyph header generator: [scripts/generate_consult_glyph_header.js](/Users/carolinehana/ROCK/scripts/generate_consult_glyph_header.js)
 - Main firmware: [ROCK.ino](/Users/carolinehana/ROCK/ROCK/ROCK.ino)
+- Consult glyph bitmap header: [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h)
+- Consult preview: [consult_preview.html](/Users/carolinehana/ROCK/consult_preview.html)
 
 Useful serial commands at `115200`:
 
@@ -165,8 +178,11 @@ TEST:Say hello from the OpenAI test path
 - serial `TEST:` path works per user report
 - Wi-Fi verified connected to `caroline`
 - potentiometer-driven glyph gallery verified in firmware build/upload flow
+- Supabase consult backend scaffolding, seed data, migrations, and tests are in repo
+- consult result preview exists locally in browser form
+- consult bitmap rendering path is implemented in firmware source
 
 ## Git Context
 
-- working branch: `glyph`
+- working branch when this file was last updated in-session: `main`
 - remote: `origin https://github.com/Jxke/ROCK.git`

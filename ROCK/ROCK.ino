@@ -13,6 +13,7 @@
 #include <Adafruit_Sensor.h>
 #include "esp_heap_caps.h"
 #include "gallery_bitmaps.h"
+#include "consult_glyph_bitmaps.h"
 #include "maddi_logo.h"
 
 // ── YAMNet on-device audio classification ──
@@ -1759,27 +1760,52 @@ void renderMaddiResult() {
     display.setCursor((200 - (int16_t)w) / 2, 40);
     display.print(upperWord);
 
-    // Draw a separator line
-    display.drawLine(20, 55, 180, 55, GxEPD_BLACK);
+    const int16_t topRowY = 68;
+    const int16_t bottomRowY = 118;
+    const int16_t topLeftX = 46;
+    const int16_t topRightX = 106;
+    const int16_t bottomCenterX = 76;
+    const int16_t glyphPositions[3][2] = {
+      {topLeftX, topRowY},
+      {topRightX, topRowY},
+      {bottomCenterX, bottomRowY},
+    };
 
-    // Draw the 3 glyph names
-    const int startY = 85;
-    const int lineHeight = 28;
-    const char* labels[] = {"setup", "tension", "resolve"};
     for (int i = 0; i < 3; i++) {
-      String line = String(labels[i]) + ": " + consultGlyphIds[i];
-      display.getTextBounds(line, 0, 0, &x1, &y1, &w, &h);
-      display.setCursor((200 - (int16_t)w) / 2, startY + i * lineHeight);
-      display.print(line);
+      const uint8_t* bitmap = nullptr;
+      for (size_t j = 0; j < CONSULT_GLYPH_BITMAP_COUNT; j++) {
+        if (consultGlyphIds[i].equalsIgnoreCase(CONSULT_GLYPH_BITMAPS[j].id)) {
+          bitmap = CONSULT_GLYPH_BITMAPS[j].bitmap;
+          break;
+        }
+      }
+
+      const int16_t drawX = glyphPositions[i][0];
+      const int16_t drawY = glyphPositions[i][1];
+      if (bitmap != nullptr) {
+        display.drawBitmap(
+          drawX,
+          drawY,
+          bitmap,
+          CONSULT_GLYPH_BITMAP_WIDTH,
+          CONSULT_GLYPH_BITMAP_HEIGHT,
+          GxEPD_BLACK
+        );
+      } else {
+        String fallback = consultGlyphIds[i];
+        fallback.toUpperCase();
+        display.getTextBounds(fallback, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(drawX + (CONSULT_GLYPH_BITMAP_WIDTH - static_cast<int16_t>(w)) / 2, drawY + 28);
+        display.print(truncateForDisplay(fallback, 8));
+      }
     }
 
-    // Draw separator
-    display.drawLine(20, startY + 3 * lineHeight - 10, 180, startY + 3 * lineHeight - 10, GxEPD_BLACK);
+    display.drawLine(20, 172, 180, 172, GxEPD_BLACK);
 
     // Label at bottom
-    display.getTextBounds("MADDI", 0, 0, &x1, &y1, &w, &h);
+    display.getTextBounds("NARA", 0, 0, &x1, &y1, &w, &h);
     display.setCursor((200 - (int16_t)w) / 2, 192);
-    display.print("MADDI");
+    display.print("NARA");
   } while (display.nextPage());
 }
 
