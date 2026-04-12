@@ -1,4 +1,7 @@
 const DEFAULT_SETTINGS = {
+  enableChatGPT: true,
+  enableClaude: true,
+  enableGemini: true,
   personalDetection: true,
   anthropomorphizationDetection: true,
   sycophanticResponseDetection: true
@@ -123,10 +126,28 @@ async function initializePopup() {
   const personalToggle = document.getElementById("personalToggle");
   const anthroToggle = document.getElementById("anthroToggle");
   const sycophanticToggle = document.getElementById("sycophanticToggle");
+  const chatgptToggle = document.getElementById("chatgptToggle");
+  const claudeToggle = document.getElementById("claudeToggle");
+  const geminiToggle = document.getElementById("geminiToggle");
 
+  chatgptToggle.checked = settings.enableChatGPT;
+  claudeToggle.checked = settings.enableClaude;
+  geminiToggle.checked = settings.enableGemini;
   personalToggle.checked = settings.personalDetection;
   anthroToggle.checked = settings.anthropomorphizationDetection;
   sycophanticToggle.checked = settings.sycophanticResponseDetection;
+
+  chatgptToggle.addEventListener("change", () => {
+    saveSettings({ enableChatGPT: chatgptToggle.checked });
+  });
+
+  claudeToggle.addEventListener("change", () => {
+    saveSettings({ enableClaude: claudeToggle.checked });
+  });
+
+  geminiToggle.addEventListener("change", () => {
+    saveSettings({ enableGemini: geminiToggle.checked });
+  });
 
   personalToggle.addEventListener("change", () => {
     saveSettings({ personalDetection: personalToggle.checked });

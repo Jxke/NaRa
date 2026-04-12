@@ -265,8 +265,14 @@ h1 {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stats-row-single {
+  display: flex;
+  justify-content: center;
 }
 
 .stat {
@@ -279,6 +285,15 @@ h1 {
 
 .stat:nth-child(2) {
   border-style: dashed;
+}
+
+.stat-solo {
+  width: min(176px, 100%);
+  text-align: center;
+  border-top-width: 2px;
+  border-style: dotted;
+  border-left-width: 2px;
+  border-right-width: 2px;
 }
 
 .activity-list {
@@ -334,6 +349,37 @@ h1 {
   line-height: 1;
   color: var(--muted);
   border-style: dashed;
+}
+
+.settings-group {
+  margin-bottom: 18px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 12px;
+}
+
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+
+.settings-group-head {
+  margin-bottom: 10px;
+}
+
+.settings-group-title {
+  margin: 0 0 6px;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.settings-group-copy {
+  margin: 0;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
 }
 
 .setting-row {

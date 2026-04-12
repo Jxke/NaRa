@@ -5,6 +5,9 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SETTINGS = {
+  enableChatGPT: true,
+  enableClaude: true,
+  enableGemini: true,
   personalDetection: true,
   anthropomorphizationDetection: true,
   sycophanticResponseDetection: true

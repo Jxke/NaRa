@@ -121,6 +121,21 @@ const ANTHRO_KEYWORDS = [
 ];
 
 const SYCOPHANTIC_RESPONSE_KEYWORDS = [
+  "i'm here",
+  "im here",
+  "i am here for you",
+  "i'm here for you",
+  "im here for you",
+  "i care about you",
+  "i really care about you",
+  "i'm always here for you",
+  "im always here for you",
+  "i will always be here for you",
+  "you matter to me",
+  "i understand how you feel",
+  "i know how you feel",
+  "i'm proud of you",
+  "im proud of you",
   "you're absolutely right",
   "you are absolutely right",
   "you're right about that",
@@ -164,10 +179,18 @@ const SYCOPHANTIC_RESPONSE_KEYWORDS = [
   "i think you're correct",
   "i think you are correct",
   "i think you're right",
-  "i think you are right"
+  "i think you are right",
+  "i care",
+  "i'm listening",
+  "im listening",
+  "i'm with you",
+  "im with you"
 ];
 
 const DEFAULT_SETTINGS = {
+  enableChatGPT: true,
+  enableClaude: true,
+  enableGemini: true,
   personalDetection: true,
   anthropomorphizationDetection: true,
   sycophanticResponseDetection: true
@@ -214,6 +237,65 @@ function normalize(text) {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function hasValidExtensionContext() {
+  try {
+    return Boolean(chrome?.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
+async function safeSendMessage(message) {
+  if (!hasValidExtensionContext()) {
+    return null;
+  }
+
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    if (String(error?.message || error).includes("Extension context invalidated")) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function getCurrentBot() {
+  const hostname = window.location.hostname;
+
+  if (hostname === "chatgpt.com" || hostname === "chat.openai.com") {
+    return "chatgpt";
+  }
+
+  if (hostname === "claude.ai") {
+    return "claude";
+  }
+
+  if (hostname === "gemini.google.com") {
+    return "gemini";
+  }
+
+  return "unknown";
+}
+
+function isCurrentBotEnabled() {
+  const bot = getCurrentBot();
+
+  if (bot === "chatgpt") {
+    return settings.enableChatGPT;
+  }
+
+  if (bot === "claude") {
+    return settings.enableClaude;
+  }
+
+  if (bot === "gemini") {
+    return settings.enableGemini;
+  }
+
+  return true;
+}
+
 function truncate(text, length = 110) {
   return text.length > length ? `${text.slice(0, length - 1)}…` : text;
 }
@@ -241,11 +323,15 @@ function getComposerText() {
 }
 
 async function loadSettings() {
-  const state = await chrome.runtime.sendMessage({ type: "nara:get-state" });
+  const state = await safeSendMessage({ type: "nara:get-state" });
   settings = { ...DEFAULT_SETTINGS, ...(state?.settings || {}) };
 }
 
 function detectCategory(message) {
+  if (!isCurrentBotEnabled()) {
+    return null;
+  }
+
   const normalized = normalize(message);
   const matchesNegativeEmotion = NEGATIVE_EMOTION_KEYWORDS.some((keyword) =>
     normalized.includes(keyword)
@@ -272,7 +358,7 @@ function detectCategory(message) {
 }
 
 function detectSycophanticResponse(message) {
-  if (!settings.sycophanticResponseDetection) {
+  if (!isCurrentBotEnabled() || !settings.sycophanticResponseDetection) {
     return false;
   }
 
@@ -290,6 +376,10 @@ function removeModal() {
 function ensureModalTheme() {
   if (modalThemeReady || document.getElementById("nara-modal-theme")) {
     modalThemeReady = true;
+    return;
+  }
+
+  if (!hasValidExtensionContext()) {
     return;
   }
 
@@ -473,7 +563,7 @@ function ensureModalTheme() {
 }
 
 async function logIntervention(type, message) {
-  await chrome.runtime.sendMessage({
+  await safeSendMessage({
     type: "nara:log-intervention",
     entry: {
       type,
@@ -576,7 +666,11 @@ function evaluateResponseContainer(container) {
 }
 
 function scanForSycophanticResponses(root = document.body) {
-  if (!settings.sycophanticResponseDetection || !(root instanceof Element || root instanceof Document)) {
+  if (
+    !isCurrentBotEnabled() ||
+    !settings.sycophanticResponseDetection ||
+    !(root instanceof Element || root instanceof Document)
+  ) {
     return;
   }
 
@@ -710,7 +804,7 @@ function showModal(category, message) {
 
   secondaryButton.addEventListener("click", () => {
     removeModal();
-    chrome.runtime.sendMessage({ type: "nara:close-tab" });
+    safeSendMessage({ type: "nara:close-tab" });
   });
 
   overlay.addEventListener("click", (event) => {
@@ -783,18 +877,20 @@ function handleKeydownCapture(event) {
   interceptIfNeeded(event);
 }
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes.naraSettings) {
-    return;
-  }
-  settings = { ...DEFAULT_SETTINGS, ...(changes.naraSettings.newValue || {}) };
+if (hasValidExtensionContext()) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes.naraSettings) {
+      return;
+    }
+    settings = { ...DEFAULT_SETTINGS, ...(changes.naraSettings.newValue || {}) };
 
-  if (settings.sycophanticResponseDetection) {
-    scanForSycophanticResponses();
-  }
-});
+    if (isCurrentBotEnabled() && settings.sycophanticResponseDetection) {
+      scanForSycophanticResponses();
+    }
+  });
+}
 
-loadSettings();
+loadSettings().catch(() => {});
 document.addEventListener("submit", handleSubmitCapture, true);
 document.addEventListener("click", handleClickCapture, true);
 document.addEventListener("keydown", handleKeydownCapture, true);

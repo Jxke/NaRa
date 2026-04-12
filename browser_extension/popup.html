@@ -53,7 +53,10 @@
             <p class="stat-label">Anthropomorphization</p>
             <p id="anthroCount" class="stat-value">0</p>
           </article>
-          <article class="stat">
+        </div>
+
+        <div class="stats-row-single">
+          <article class="stat stat-solo">
             <p class="stat-label">Sycophancy</p>
             <p id="sycophanticCount" class="stat-value">0</p>
           </article>
@@ -70,32 +73,70 @@
 
       <section id="settings" class="panel">
         <div class="panel-head">
-          <p class="section-kicker">Filters</p>
+          <p class="section-kicker">Settings</p>
           <p class="section-rule"></p>
         </div>
-        <label class="setting-row">
-          <div>
-            <p class="setting-title">Personal Topic Detection</p>
-            <p class="setting-copy">Flags emotional, relational, or mental-health leaning prompts.</p>
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <p class="settings-group-title">Detection Rules</p>
+            <p class="settings-group-copy">Choose which interaction patterns Nara should intercept.</p>
           </div>
-          <input id="personalToggle" class="setting-toggle" type="checkbox" />
-        </label>
 
-        <label class="setting-row">
-          <div>
-            <p class="setting-title">Anthropomorphization Detection</p>
-            <p class="setting-copy">Flags human-like attachment language aimed at the chatbot.</p>
-          </div>
-          <input id="anthroToggle" class="setting-toggle" type="checkbox" />
-        </label>
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Personal Topic Detection</p>
+              <p class="setting-copy">Flags emotional, relational, or mental-health leaning prompts.</p>
+            </div>
+            <input id="personalToggle" class="setting-toggle" type="checkbox" />
+          </label>
 
-        <label class="setting-row">
-          <div>
-            <p class="setting-title">Sycophantic Response Detection</p>
-            <p class="setting-copy">Blocks chatbot replies that flatter, over-validate, or mirror judgment too eagerly.</p>
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Anthropomorphization Detection</p>
+              <p class="setting-copy">Flags human-like attachment language aimed at the chatbot.</p>
+            </div>
+            <input id="anthroToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Sycophantic Response Detection</p>
+              <p class="setting-copy">Blocks chatbot replies that flatter, over-validate, or mirror judgment too eagerly.</p>
+            </div>
+            <input id="sycophanticToggle" class="setting-toggle" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <p class="settings-group-title">Chatbots</p>
+            <p class="settings-group-copy">Choose which chatbot surfaces Nara should monitor.</p>
           </div>
-          <input id="sycophanticToggle" class="setting-toggle" type="checkbox" />
-        </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">ChatGPT</p>
+              <p class="setting-copy">Enable Nara guardrails on ChatGPT.</p>
+            </div>
+            <input id="chatgptToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Claude</p>
+              <p class="setting-copy">Enable Nara guardrails on Claude.</p>
+            </div>
+            <input id="claudeToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Gemini</p>
+              <p class="setting-copy">Enable Nara guardrails on Gemini.</p>
+            </div>
+            <input id="geminiToggle" class="setting-toggle" type="checkbox" />
+          </label>
+        </div>
       </section>
     </main>
 
