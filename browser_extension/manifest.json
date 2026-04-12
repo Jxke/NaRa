@@ -28,5 +28,20 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/fonts/pp/PPMondwest-Regular.otf",
+        "assets/fonts/pp/PPNeueBit-Bold.otf",
+        "assets/nara/logomark.svg"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ]
+    }
   ]
 }

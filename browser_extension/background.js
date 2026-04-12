@@ -6,7 +6,8 @@ const STORAGE_KEYS = {
 
 const DEFAULT_SETTINGS = {
   personalDetection: true,
-  anthropomorphizationDetection: true
+  anthropomorphizationDetection: true,
+  sycophanticResponseDetection: true
 };
 
 async function readState() {
@@ -90,9 +91,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "nara:clear-badge") {
     chrome.storage.local
-      .set({ [STORAGE_KEYS.badgeCount]: 0 })
+      .set({
+        [STORAGE_KEYS.badgeCount]: 0,
+        [STORAGE_KEYS.history]: []
+      })
       .then(() => setBadge(0))
-      .then(() => sendResponse({ ok: true }));
+      .then(() => sendResponse({ ok: true, history: [] }));
     return true;
   }
 

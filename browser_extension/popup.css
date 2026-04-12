@@ -1,12 +1,29 @@
 :root {
   color-scheme: light;
-  --bg: #f6f1e8;
-  --card: #fffaf2;
-  --line: #e9dcc6;
-  --ink: #1e293b;
-  --muted: #6b7280;
-  --accent: #c66f49;
-  --accent-deep: #92400e;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --line: rgba(0, 0, 0, 0.18);
+  --line-strong: #000000;
+  --line-faint: rgba(0, 0, 0, 0.07);
+  --ink: #000000;
+  --muted: rgba(0, 0, 0, 0.62);
+  --faded: rgba(0, 0, 0, 0.5);
+}
+
+@font-face {
+  font-family: "PP Mondwest";
+  src: url("assets/fonts/pp/PPMondwest-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PP NeueBit";
+  src: url("assets/fonts/pp/PPNeueBit-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {
@@ -15,12 +32,14 @@
 
 body {
   margin: 0;
-  width: 380px;
-  min-height: 500px;
-  font-family: Georgia, "Times New Roman", serif;
+  width: 392px;
+  min-height: 540px;
+  font-family: "PP Mondwest", ui-serif, Georgia, serif;
   background:
-    radial-gradient(circle at top right, rgba(198, 111, 73, 0.18), transparent 32%),
-    linear-gradient(180deg, #fbf5ea 0%, var(--bg) 100%);
+    linear-gradient(var(--line-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-faint) 1px, transparent 1px),
+    var(--bg);
+  background-size: 18px 18px, 18px 18px, auto;
   color: var(--ink);
 }
 
@@ -29,10 +48,12 @@ body {
 }
 
 .hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 62px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-strong);
   margin-bottom: 16px;
 }
 
@@ -40,54 +61,101 @@ body {
 .metric-label,
 .stat-label,
 .setting-copy,
-.weekly-summary {
-  font-family: "Helvetica Neue", Arial, sans-serif;
+.weekly-summary,
+.hero-note,
+.activity-meta {
+  font-family: "PP NeueBit", ui-monospace, monospace;
 }
 
 .eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: var(--accent-deep);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--ink);
 }
 
 h1 {
   margin: 0;
-  font-size: 34px;
-  font-weight: 600;
+  font-size: 40px;
+  line-height: 0.94;
+  font-weight: 400;
+}
+
+.hero-mark {
+  width: 62px;
+  height: 62px;
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  background: var(--card);
+}
+
+.hero-mark img {
+  width: 34px;
+  height: 34px;
+}
+
+.hero-copy {
+  min-width: 0;
+}
+
+.hero-note {
+  margin: 8px 0 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
 }
 
 .ghost-button {
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--line-strong);
+  background: var(--card);
   color: var(--ink);
-  border-radius: 999px;
-  padding: 10px 14px;
+  padding: 10px 12px 8px;
   cursor: pointer;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ghost-button:hover {
+  background: var(--ink);
+  color: var(--bg);
 }
 
 .tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 0;
   margin-bottom: 16px;
+  border: 1px solid var(--line-strong);
 }
 
 .tab {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 10px 8px;
+  border: 0;
+  border-right: 1px solid var(--line-strong);
+  background: var(--card);
+  padding: 11px 8px 9px;
   cursor: pointer;
-  font-weight: 600;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
   color: var(--ink);
+}
+
+.tab:last-child {
+  border-right: 0;
 }
 
 .tab.is-active {
   background: var(--ink);
-  color: white;
-  border-color: var(--ink);
+  color: var(--bg);
 }
 
 .panel {
@@ -98,67 +166,119 @@ h1 {
   display: block;
 }
 
+.panel-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-kicker {
+  margin: 0;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 15px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-rule {
+  flex: 1;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
 .metric-card,
 .stat,
 .setting-row,
 .activity-item,
 .empty-state {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--card);
-  border-radius: 20px;
-  box-shadow: 0 10px 24px rgba(148, 64, 14, 0.06);
 }
 
 .metric-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  padding: 14px;
   gap: 14px;
-  align-items: center;
-  padding: 18px;
+}
+
+.metric-leading {
+  border-right: 1px dashed var(--line-strong);
+  padding-right: 14px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.metric-stamp {
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 15px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-content {
+  min-width: 0;
 }
 
 .metric-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: #f4dccf;
-  color: var(--accent-deep);
-  font-size: 24px;
+  display: inline-block;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 40px;
+  line-height: 0.9;
 }
 
 .metric-label,
 .stat-label,
 .setting-copy,
-.activity-meta {
+.activity-meta,
+.hero-note {
   color: var(--muted);
 }
 
 .metric-label,
 .stat-label {
   margin: 0 0 4px;
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .metric-value,
 .stat-value {
   margin: 0;
-  font-size: 32px;
+  font-family: "PP Mondwest", ui-serif, Georgia, serif;
+  font-size: 44px;
+  line-height: 0.95;
+  font-weight: 400;
 }
 
 .weekly-summary {
-  margin: 14px 0;
-  font-size: 14px;
+  margin: 12px 0 14px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .stat {
-  padding: 16px;
+  padding: 14px;
+}
+
+.stat:first-child {
+  border-width: 2px;
+}
+
+.stat:nth-child(2) {
+  border-style: dashed;
 }
 
 .activity-list {
@@ -168,56 +288,120 @@ h1 {
 
 .activity-item {
   padding: 14px;
+  border-left-width: 2px;
+}
+
+.activity-item.is-personal {
+  border-style: solid;
+}
+
+.activity-item.is-anthro {
+  border-style: dashed;
+}
+
+.activity-item.is-sycophantic {
+  border-left-width: 1px;
+  border-top-width: 2px;
 }
 
 .activity-type {
   margin: 0 0 6px;
-  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   font-weight: 700;
 }
 
 .activity-preview {
   margin: 0 0 8px;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 19px;
+  line-height: 1.25;
 }
 
 .activity-meta {
   margin: 0;
-  font-family: "Helvetica Neue", Arial, sans-serif;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .empty-state {
   padding: 24px 18px;
-  text-align: center;
-  font-family: "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
   color: var(--muted);
+  border-style: dashed;
 }
 
 .setting-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
-  margin-bottom: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
 }
 
 .setting-title {
   margin: 0 0 6px;
-  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 17px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   font-weight: 700;
 }
 
 .setting-copy {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1;
 }
 
-input[type="checkbox"] {
-  width: 46px;
-  height: 26px;
-  accent-color: var(--accent);
+.setting-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  margin: 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.setting-toggle:checked::after {
+  content: "☑";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.setting-toggle:not(:checked)::after {
+  content: "◯";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+button,
+input {
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--line-strong);
 }

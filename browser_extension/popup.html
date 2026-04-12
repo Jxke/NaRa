@@ -9,11 +9,15 @@
   <body>
     <main class="shell">
       <header class="hero">
-        <div>
+        <div class="hero-mark">
+          <img src="assets/nara/logomark.svg" alt="" />
+        </div>
+        <div class="hero-copy">
           <p class="eyebrow">Guardrail Layer</p>
           <h1>Nara</h1>
+          <p class="hero-note">Palm-sized digital oracle for reflection and cognitive health.</p>
         </div>
-        <button id="clearBadgeButton" class="ghost-button">Clear badge</button>
+        <button id="clearBadgeButton" class="ghost-button">Clear Badge</button>
       </header>
 
       <nav class="tabs" aria-label="Extension sections">
@@ -23,9 +27,16 @@
       </nav>
 
       <section id="overview" class="panel is-active">
+        <div class="panel-head">
+          <p class="section-kicker">Status</p>
+          <p class="section-rule"></p>
+        </div>
         <div class="metric-card">
-          <span class="metric-icon">◌</span>
-          <div>
+          <div class="metric-leading">
+            <span class="metric-icon">◌</span>
+            <span class="metric-stamp">Guardrail count</span>
+          </div>
+          <div class="metric-content">
             <p class="metric-label">Total interventions</p>
             <p id="totalInterventions" class="metric-value">0</p>
           </div>
@@ -42,28 +53,48 @@
             <p class="stat-label">Anthropomorphization</p>
             <p id="anthroCount" class="stat-value">0</p>
           </article>
+          <article class="stat">
+            <p class="stat-label">Sycophancy</p>
+            <p id="sycophanticCount" class="stat-value">0</p>
+          </article>
         </div>
       </section>
 
       <section id="activity" class="panel">
+        <div class="panel-head">
+          <p class="section-kicker">Log</p>
+          <p class="section-rule"></p>
+        </div>
         <div id="activityList" class="activity-list"></div>
       </section>
 
       <section id="settings" class="panel">
+        <div class="panel-head">
+          <p class="section-kicker">Filters</p>
+          <p class="section-rule"></p>
+        </div>
         <label class="setting-row">
           <div>
-            <p class="setting-title">Personal question detection</p>
+            <p class="setting-title">Personal Topic Detection</p>
             <p class="setting-copy">Flags emotional, relational, or mental-health leaning prompts.</p>
           </div>
-          <input id="personalToggle" type="checkbox" />
+          <input id="personalToggle" class="setting-toggle" type="checkbox" />
         </label>
 
         <label class="setting-row">
           <div>
-            <p class="setting-title">Anthropomorphization detection</p>
+            <p class="setting-title">Anthropomorphization Detection</p>
             <p class="setting-copy">Flags human-like attachment language aimed at the chatbot.</p>
           </div>
-          <input id="anthroToggle" type="checkbox" />
+          <input id="anthroToggle" class="setting-toggle" type="checkbox" />
+        </label>
+
+        <label class="setting-row">
+          <div>
+            <p class="setting-title">Sycophantic Response Detection</p>
+            <p class="setting-copy">Blocks chatbot replies that flatter, over-validate, or mirror judgment too eagerly.</p>
+          </div>
+          <input id="sycophanticToggle" class="setting-toggle" type="checkbox" />
         </label>
       </section>
     </main>
