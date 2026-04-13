@@ -8,6 +8,7 @@
 #include <Wire.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeMonoBold12pt7b.h>
 #include <Adafruit_DRV2605.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -15,6 +16,7 @@
 #include "gallery_bitmaps.h"
 #include "consult_glyph_bitmaps.h"
 #include "maddi_logo.h"
+#include "nara_logo.h"
 
 // ── YAMNet on-device audio classification ──
 #include <Chirale_TensorFlowLite.h>
@@ -29,6 +31,8 @@ namespace {
 // Forward declarations
 void initYamnet();
 bool classifyAudioOnDevice();
+void startNaraUiTest();
+void processNaraUiTest();
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
 constexpr char DEFAULT_WIFI_SSID[] = "caroline";
@@ -53,6 +57,9 @@ constexpr char PRIOR_DEFAULT_SYSTEM_PROMPT[] =
 constexpr int BUTTON_PIN = 2;
 constexpr int POT_PIN = 8;
 constexpr int GALLERY_POT_PIN = 3;
+constexpr int SELECT_BUTTON_PIN = 15;
+constexpr int BACK_BUTTON_PIN = 16;
+constexpr int NARA_UI_POT_PIN = GALLERY_POT_PIN;
 
 constexpr int MIC_WS_PIN = 4;
 constexpr int MIC_SCK_PIN = 5;
@@ -99,6 +106,10 @@ constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
 constexpr bool ENABLE_HAPTIC = true;
 constexpr bool ENABLE_IMU = true;
 constexpr bool ENABLE_BUTTON_PTT = true;
+constexpr bool ENABLE_NARA_UI_TEST = true;  // test harness; disable to restore live consultation flow
+constexpr uint32_t NARA_UI_SPLASH_MS = 5000;
+constexpr uint32_t NARA_UI_PROCESS_MS = 1600;
+constexpr unsigned long NARA_UI_POT_SETTLE_MS = 120;
 
 constexpr uint32_t STATUS_PARTIAL_X = 0;
 constexpr uint32_t STATUS_PARTIAL_Y = 0;
@@ -222,6 +233,89 @@ enum AppState {
 };
 
 AppState appState = STATE_WAITING_CONFIG;
+
+enum NaraUiState {
+  NARA_UI_0_IDLE,
+  NARA_UI_1_SPLASH,
+  NARA_UI_2_LISTENING,
+  NARA_UI_3_PROCESSING,
+  NARA_UI_4_OUTPUT,
+  NARA_UI_MENU,
+  NARA_UI_3A_LEXICON,
+  NARA_UI_3B_HISTORY,
+  NARA_UI_3C_SETTINGS,
+  NARA_UI_5A_DETAIL
+};
+
+struct NaraButtonState {
+  uint8_t pin;
+  bool idleLevel;
+  bool stablePressed;
+  bool lastRawPressed;
+  unsigned long lastChangeMs;
+};
+
+struct NaraSampleOutput {
+  const char* word;
+  const char* glyphs[3];
+};
+
+struct NaraSettingItem {
+  const char* label;
+  bool enabled;
+};
+
+NaraButtonState naraRecordButton = {BUTTON_PIN, true, false, false, 0};
+NaraButtonState naraSelectButton = {SELECT_BUTTON_PIN, true, false, false, 0};
+NaraButtonState naraBackButton = {BACK_BUTTON_PIN, true, false, false, 0};
+
+constexpr NaraSampleOutput NARA_SAMPLE_OUTPUTS[] = {
+  {"BECOMING", {"venture", "transformation", "introspect"}},
+  {"ALIGNMENT", {"balance", "clarity", "progression"}},
+  {"REFRAMING", {"ripple", "conflict", "harmony"}},
+};
+
+constexpr const char* NARA_LEXICON_GLYPHS[] = {
+  "venture", "manifestation", "intuition", "abundance", "structure", "conformity",
+  "divergence", "determination", "courage", "introspect", "cascade", "balance",
+  "surrender", "transformation", "harmony", "restriction", "sudden", "healing",
+  "illusion", "clarity", "awakening", "complete", "industry", "transition",
+  "release", "duality", "conflict", "clouded", "pour", "threshold",
+  "fire", "pattern", "house", "bond", "detachment", "unity",
+  "cycles", "interconnection", "opening", "ripple", "dialogue", "progression",
+};
+
+NaraSampleOutput naraHistory[3] = {
+  NARA_SAMPLE_OUTPUTS[1],
+  NARA_SAMPLE_OUTPUTS[2],
+  NARA_SAMPLE_OUTPUTS[0],
+};
+
+NaraSettingItem naraSettings[] = {
+  {"CONTEXT", true},
+  {"RECORDING", true},
+  {"LOW DATA", false},
+  {"BATTERY", false},
+};
+
+NaraUiState naraUiState = NARA_UI_1_SPLASH;
+NaraUiState naraUiReturnState = NARA_UI_4_OUTPUT;
+unsigned long naraUiStateStartedMs = 0;
+size_t naraUiSampleCursor = 0;
+uint8_t naraUiOutputFocusIndex = 0;
+bool naraUiOutputMenuArmed = false;
+uint8_t naraUiMenuIndex = 0;
+uint8_t naraUiHistoryIndex = 0;
+uint8_t naraUiSettingsIndex = 0;
+uint8_t naraUiDetailGlyphIndex = 0;
+uint8_t naraUiLexiconIndex = 0;
+uint8_t naraUiIdlePotBucket = 0;
+int naraUiLastPotBucket = -1;
+unsigned long naraUiLastPotBucketChangeMs = 0;
+bool naraUiNeedsRender = true;
+bool naraUiNeedsFullRefresh = true;
+bool naraUiRecordArmed = false;
+NaraSampleOutput naraCurrentOutput = NARA_SAMPLE_OUTPUTS[0];
 
 bool writeI2CRegister8(uint8_t address, uint8_t reg, uint8_t value);
 bool readI2CRegister8(uint8_t address, uint8_t reg, uint8_t& value);
@@ -1809,6 +1903,602 @@ void renderMaddiResult() {
   } while (display.nextPage());
 }
 
+bool updateNaraButtonState(NaraButtonState& button) {
+  const bool rawPressed = (digitalRead(button.pin) != button.idleLevel);
+  if (rawPressed != button.lastRawPressed) {
+    button.lastRawPressed = rawPressed;
+    button.lastChangeMs = millis();
+  }
+
+  if (rawPressed == button.stablePressed) {
+    return false;
+  }
+
+  if (millis() - button.lastChangeMs < BUTTON_DEBOUNCE_MS) {
+    return false;
+  }
+
+  button.stablePressed = rawPressed;
+  return true;
+}
+
+void initializeNaraButtonState(NaraButtonState& button) {
+  button.idleLevel = digitalRead(button.pin);
+  button.lastRawPressed = false;
+  button.stablePressed = false;
+  button.lastChangeMs = millis();
+}
+
+const uint8_t* lookupConsultGlyphBitmap(const char* id) {
+  for (size_t index = 0; index < CONSULT_GLYPH_BITMAP_COUNT; index++) {
+    if (strcmp(id, CONSULT_GLYPH_BITMAPS[index].id) == 0) {
+      return CONSULT_GLYPH_BITMAPS[index].bitmap;
+    }
+  }
+  return nullptr;
+}
+
+bool consultGlyphPixelOn(const uint8_t* bitmap, uint16_t x, uint16_t y) {
+  const uint16_t bytesPerRow = (CONSULT_GLYPH_BITMAP_WIDTH + 7) / 8;
+  const size_t byteIndex = y * bytesPerRow + (x / 8);
+  const uint8_t mask = 0x80 >> (x % 8);
+  return (pgm_read_byte(bitmap + byteIndex) & mask) != 0;
+}
+
+void drawScaledConsultGlyph(int16_t x, int16_t y, const uint8_t* bitmap, uint16_t targetW, uint16_t targetH) {
+  if (bitmap == nullptr || targetW == 0 || targetH == 0) return;
+
+  for (uint16_t dy = 0; dy < targetH; dy++) {
+    const uint16_t srcY = (dy * CONSULT_GLYPH_BITMAP_HEIGHT) / targetH;
+    for (uint16_t dx = 0; dx < targetW; dx++) {
+      const uint16_t srcX = (dx * CONSULT_GLYPH_BITMAP_WIDTH) / targetW;
+      if (consultGlyphPixelOn(bitmap, srcX, srcY)) {
+        display.drawPixel(x + dx, y + dy, GxEPD_BLACK);
+      }
+    }
+  }
+}
+
+void drawCenteredTextLine(const String& text, int16_t centerY) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(text, 0, centerY, &x1, &y1, &w, &h);
+  display.setCursor((display.width() - static_cast<int16_t>(w)) / 2, centerY);
+  display.print(text);
+}
+
+uint8_t readNaraUiPotBucket(uint8_t bucketCount) {
+  if (bucketCount <= 1) return 0;
+  const int raw = analogRead(NARA_UI_POT_PIN);
+  const int constrained = constrain(raw, 0, 4095);
+  const long mapped = map(constrained, 0, 4095, 0, bucketCount - 1);
+  return static_cast<uint8_t>(constrain(mapped, 0L, static_cast<long>(bucketCount - 1)));
+}
+
+bool readStableNaraUiPotBucket(uint8_t bucketCount, uint8_t& stableBucket) {
+  const int rawBucket = static_cast<int>(readNaraUiPotBucket(bucketCount));
+  if (rawBucket != naraUiLastPotBucket) {
+    naraUiLastPotBucket = rawBucket;
+    naraUiLastPotBucketChangeMs = millis();
+    return false;
+  }
+
+  if (millis() - naraUiLastPotBucketChangeMs < NARA_UI_POT_SETTLE_MS) {
+    return false;
+  }
+
+  stableBucket = static_cast<uint8_t>(rawBucket);
+  return true;
+}
+
+void drawNaraUiHeader(const char* title, const char* code) {
+  display.setTextColor(GxEPD_BLACK);
+  display.setFont(&FreeMonoBold9pt7b);
+  if (title != nullptr && strlen(title) > 0) {
+    display.setCursor(10, 26);
+    display.print(title);
+    display.drawLine(8, 34, 192, 34, GxEPD_BLACK);
+  }
+}
+
+void splitFooterLabel(const char* label, String& firstLine, String& secondLine) {
+  if (label == nullptr) {
+    firstLine = "";
+    secondLine = "";
+    return;
+  }
+
+  const String text = String(label);
+  const int splitAt = text.indexOf(' ');
+  if (splitAt < 0) {
+    firstLine = text;
+    secondLine = "";
+    return;
+  }
+
+  firstLine = text.substring(0, splitAt);
+  secondLine = text.substring(splitAt + 1);
+}
+
+void drawNaraUiFooter(const char* left, const char* right) {
+  display.drawLine(8, 172, 192, 172, GxEPD_BLACK);
+
+  String leftTop;
+  String leftBottom;
+  String rightTop;
+  String rightBottom;
+  splitFooterLabel(left, leftTop, leftBottom);
+  splitFooterLabel(right, rightTop, rightBottom);
+
+  display.setCursor(10, 190);
+  display.print(leftTop);
+  if (leftBottom.length() > 0) {
+    display.setCursor(10, 201);
+    display.print(leftBottom);
+  }
+
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(rightTop, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor(display.width() - static_cast<int16_t>(w) - 10, 190);
+  display.print(rightTop);
+  if (rightBottom.length() > 0) {
+    display.getTextBounds(rightBottom, 0, 0, &x1, &y1, &w, &h);
+    display.setCursor(display.width() - static_cast<int16_t>(w) - 10, 201);
+    display.print(rightBottom);
+  }
+}
+
+void renderNaraUiIdle() {
+  display.setCursor(92, 118);
+  display.print("+");
+}
+
+void renderNaraUiSplash() {
+  display.drawBitmap(0, 0, NARA_LOGO, NARA_LOGO_WIDTH, NARA_LOGO_HEIGHT, GxEPD_BLACK);
+}
+
+void renderNaraUiListening() {
+  drawCenteredTextLine("LISTENING", 96);
+  drawCenteredTextLine("RELEASE TO END", 126);
+}
+
+void renderNaraUiProcessing() {
+  drawCenteredTextLine("PROCESSING", 96);
+  drawCenteredTextLine("GLYPHS IN FLIGHT", 126);
+}
+
+void renderNaraUiOutput() {
+  display.setFont(&FreeMonoBold12pt7b);
+  drawCenteredTextLine(naraCurrentOutput.word, 36);
+  display.setFont(&FreeMonoBold9pt7b);
+
+  const int16_t glyphX[3] = {16, 122, 67};
+  const int16_t glyphY[3] = {50, 50, 108};
+  const int16_t glyphW[3] = {60, 60, 64};
+  const int16_t glyphH[3] = {60, 60, 64};
+
+  for (uint8_t index = 0; index < 3; index++) {
+    const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentOutput.glyphs[index]);
+    if (naraUiOutputFocusIndex == index && !naraUiOutputMenuArmed) {
+      display.drawRect(glyphX[index] - 4, glyphY[index] - 4, glyphW[index] + 8, glyphH[index] + 8, GxEPD_BLACK);
+    }
+    if (bitmap != nullptr) {
+      drawScaledConsultGlyph(glyphX[index], glyphY[index], bitmap, glyphW[index], glyphH[index]);
+    }
+  }
+}
+
+void renderNaraUiMenu() {
+  const char* labels[] = {"LEXICON", "HISTORY", "SETTINGS"};
+  const int16_t centerY[] = {74, 114, 154};
+
+  display.setFont(&FreeMonoBold12pt7b);
+  for (uint8_t index = 0; index < 3; index++) {
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(labels[index], 0, centerY[index], &x1, &y1, &w, &h);
+    const int16_t textX = (display.width() - static_cast<int16_t>(w)) / 2;
+    if (index == naraUiMenuIndex) {
+      display.drawRect(textX - 10, y1 - 8, w + 20, h + 16, GxEPD_BLACK);
+    }
+    display.setCursor(textX, centerY[index]);
+    display.print(labels[index]);
+  }
+  display.setFont(&FreeMonoBold9pt7b);
+}
+
+void renderNaraUiHistory() {
+  for (uint8_t row = 0; row < 3; row++) {
+    const NaraSampleOutput& entry = naraHistory[row];
+    const int16_t y = 58 + row * 40;
+    if (row == naraUiHistoryIndex) {
+      display.drawRect(10, y - 16, 180, 28, GxEPD_BLACK);
+    }
+    display.setCursor(16, y);
+    display.print(entry.word);
+
+    for (uint8_t glyphIndex = 0; glyphIndex < 3; glyphIndex++) {
+      const uint8_t* bitmap = lookupConsultGlyphBitmap(entry.glyphs[glyphIndex]);
+      if (bitmap != nullptr) {
+        drawScaledConsultGlyph(120 + glyphIndex * 22, y - 14, bitmap, 18, 18);
+      }
+    }
+  }
+}
+
+void renderNaraUiSettings() {
+  for (uint8_t index = 0; index < 4; index++) {
+    const int16_t y = 50 + index * 30;
+    if (index == naraUiSettingsIndex) {
+      display.drawRect(10, y - 12, 182, 22, GxEPD_BLACK);
+    }
+    display.setCursor(16, y);
+    display.print(naraSettings[index].label);
+    display.setCursor(116, y);
+    display.print(naraSettings[index].enabled ? "[X] ON" : "[ ] OFF");
+  }
+}
+
+void renderNaraUiDetail() {
+  const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentOutput.glyphs[naraUiDetailGlyphIndex]);
+  if (bitmap != nullptr) {
+    drawScaledConsultGlyph(52, 56, bitmap, 96, 96);
+  }
+}
+
+void renderNaraUiLexicon() {
+  constexpr int visibleCount = 22;
+  constexpr int centerX = 100;
+  constexpr int centerY = 102;
+  constexpr int radiusX = 68;
+  constexpr int radiusY = 48;
+  constexpr int lexiconCount = sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]);
+  const int beforeCenter = (visibleCount - 1) / 2;
+  const int afterCenter = visibleCount - 1 - beforeCenter;
+
+  for (int offset = -beforeCenter; offset <= afterCenter; offset++) {
+    int glyphIndex = static_cast<int>(naraUiLexiconIndex) + offset;
+    while (glyphIndex < 0) glyphIndex += lexiconCount;
+    while (glyphIndex >= lexiconCount) glyphIndex -= lexiconCount;
+
+    const uint8_t* bitmap = lookupConsultGlyphBitmap(NARA_LEXICON_GLYPHS[glyphIndex]);
+    if (bitmap == nullptr) continue;
+
+    if (offset == 0) {
+      display.drawRect(centerX - 34, centerY - 34, 68, 68, GxEPD_BLACK);
+      drawScaledConsultGlyph(centerX - 28, centerY - 28, bitmap, 56, 56);
+      continue;
+    }
+
+    const int ringOffset = (offset < 0) ? (offset + beforeCenter + 1) : (offset + beforeCenter);
+    const float angle = ((static_cast<float>(ringOffset) / static_cast<float>(visibleCount - 1)) * TWO_PI) - HALF_PI;
+    const int16_t x = centerX + static_cast<int16_t>(cosf(angle) * radiusX);
+    const int16_t y = centerY + static_cast<int16_t>(sinf(angle) * radiusY);
+    const int distance = abs(offset);
+    const uint16_t size = static_cast<uint16_t>(max(12, 22 - distance / 2));
+    drawScaledConsultGlyph(x - size / 2, y - size / 2, bitmap, size, size);
+  }
+}
+
+void setNaraUiState(NaraUiState nextState) {
+  naraUiState = nextState;
+  naraUiStateStartedMs = millis();
+  naraUiLastPotBucket = -1;
+  naraUiLastPotBucketChangeMs = millis();
+  naraUiNeedsRender = true;
+}
+
+void renderNaraUiScreen() {
+  if (!displayReady) return;
+
+  const uint8_t renderPasses = naraUiNeedsFullRefresh ? 1 : 2;
+  for (uint8_t pass = 0; pass < renderPasses; pass++) {
+    if (naraUiState == NARA_UI_1_SPLASH || naraUiNeedsFullRefresh) {
+      display.setFullWindow();
+    } else {
+      display.setPartialWindow(0, 0, display.width(), display.height());
+    }
+    display.firstPage();
+    do {
+      display.fillScreen(GxEPD_WHITE);
+      display.setTextColor(GxEPD_BLACK);
+      display.setFont(&FreeMonoBold9pt7b);
+
+      switch (naraUiState) {
+        case NARA_UI_0_IDLE:
+          drawNaraUiHeader("IDLE", "UI_0");
+          renderNaraUiIdle();
+          drawNaraUiFooter(naraUiIdlePotBucket == 1 ? "MENU" : "RECORD", "SELECT");
+          break;
+        case NARA_UI_1_SPLASH:
+          drawNaraUiHeader("NARA", "UI_1");
+          renderNaraUiSplash();
+          drawNaraUiFooter("BOOT", "AUTO");
+          break;
+        case NARA_UI_2_LISTENING:
+          drawNaraUiHeader("LISTENING", "UI_2");
+          renderNaraUiListening();
+          drawNaraUiFooter("RECORD", "CANCEL");
+          break;
+        case NARA_UI_3_PROCESSING:
+          drawNaraUiHeader("PROCESSING", "UI_3");
+          renderNaraUiProcessing();
+          drawNaraUiFooter("THINKING", "AUTO");
+          break;
+        case NARA_UI_4_OUTPUT:
+          drawNaraUiHeader("", "UI_4");
+          renderNaraUiOutput();
+          drawNaraUiFooter(naraUiOutputMenuArmed ? "MENU" : "GLYPH", "BACK");
+          break;
+        case NARA_UI_MENU:
+          drawNaraUiHeader("MENU", "UI_M");
+          renderNaraUiMenu();
+          drawNaraUiFooter("ROTATE", "BACK");
+          break;
+        case NARA_UI_3A_LEXICON:
+          drawNaraUiHeader("LEXICON", "UI_3A");
+          renderNaraUiLexicon();
+          drawNaraUiFooter("ROTATE", "BACK");
+          break;
+        case NARA_UI_3B_HISTORY:
+          drawNaraUiHeader("HISTORY", "UI_3B");
+          renderNaraUiHistory();
+          drawNaraUiFooter("SELECT", "BACK");
+          break;
+        case NARA_UI_3C_SETTINGS:
+          drawNaraUiHeader("SETTINGS", "UI_3C");
+          renderNaraUiSettings();
+          drawNaraUiFooter("TOGGLE", "BACK");
+          break;
+        case NARA_UI_5A_DETAIL:
+          drawNaraUiHeader("", "UI_5A");
+          renderNaraUiDetail();
+          drawNaraUiFooter("ROTATE", "BACK");
+          break;
+      }
+    } while (display.nextPage());
+  }
+
+  naraUiNeedsFullRefresh = (naraUiState == NARA_UI_1_SPLASH);
+}
+
+void rotateNaraHistory(const NaraSampleOutput& newest) {
+  naraHistory[2] = naraHistory[1];
+  naraHistory[1] = naraHistory[0];
+  naraHistory[0] = newest;
+}
+
+void applyNaraUiPotSelection(uint8_t bucket) {
+  bool changed = false;
+  switch (naraUiState) {
+    case NARA_UI_0_IDLE:
+      if (bucket != naraUiIdlePotBucket) {
+        naraUiIdlePotBucket = bucket;
+        changed = true;
+      }
+      break;
+    case NARA_UI_4_OUTPUT:
+      if (bucket >= 3) {
+        if (!naraUiOutputMenuArmed) {
+          naraUiOutputMenuArmed = true;
+          changed = true;
+        }
+      } else {
+        if (naraUiOutputMenuArmed || bucket != naraUiOutputFocusIndex) {
+          naraUiOutputMenuArmed = false;
+          naraUiOutputFocusIndex = bucket;
+          changed = true;
+        }
+      }
+      break;
+    case NARA_UI_MENU:
+      if (bucket != naraUiMenuIndex) {
+        naraUiMenuIndex = bucket;
+        changed = true;
+      }
+      break;
+    case NARA_UI_3A_LEXICON:
+      if (bucket != naraUiLexiconIndex) {
+        naraUiLexiconIndex = bucket;
+        changed = true;
+      }
+      break;
+    case NARA_UI_3B_HISTORY:
+      if (bucket != naraUiHistoryIndex) {
+        naraUiHistoryIndex = bucket;
+        changed = true;
+      }
+      break;
+    case NARA_UI_3C_SETTINGS:
+      if (bucket != naraUiSettingsIndex) {
+        naraUiSettingsIndex = bucket;
+        changed = true;
+      }
+      break;
+    case NARA_UI_5A_DETAIL:
+      if (bucket != naraUiDetailGlyphIndex) {
+        naraUiDetailGlyphIndex = bucket;
+        changed = true;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (changed) {
+    naraUiNeedsRender = true;
+  }
+}
+
+void handleNaraUiSelectPress() {
+  switch (naraUiState) {
+    case NARA_UI_0_IDLE:
+      if (naraUiIdlePotBucket == 1) {
+        naraUiReturnState = NARA_UI_0_IDLE;
+        naraUiMenuIndex = 0;
+        setNaraUiState(NARA_UI_MENU);
+      }
+      break;
+    case NARA_UI_4_OUTPUT:
+      if (naraUiOutputMenuArmed) {
+        naraUiReturnState = NARA_UI_4_OUTPUT;
+        naraUiMenuIndex = 0;
+        setNaraUiState(NARA_UI_MENU);
+      } else {
+        naraUiDetailGlyphIndex = naraUiOutputFocusIndex;
+        setNaraUiState(NARA_UI_5A_DETAIL);
+      }
+      break;
+    case NARA_UI_MENU:
+      if (naraUiMenuIndex == 0) setNaraUiState(NARA_UI_3A_LEXICON);
+      else if (naraUiMenuIndex == 1) setNaraUiState(NARA_UI_3B_HISTORY);
+      else setNaraUiState(NARA_UI_3C_SETTINGS);
+      break;
+    case NARA_UI_3B_HISTORY:
+      naraCurrentOutput = naraHistory[naraUiHistoryIndex];
+      naraUiOutputFocusIndex = 0;
+      naraUiOutputMenuArmed = false;
+      setNaraUiState(NARA_UI_4_OUTPUT);
+      break;
+    case NARA_UI_3C_SETTINGS:
+      naraSettings[naraUiSettingsIndex].enabled = !naraSettings[naraUiSettingsIndex].enabled;
+      naraUiNeedsRender = true;
+      break;
+    default:
+      break;
+  }
+}
+
+void handleNaraUiBackPress() {
+  switch (naraUiState) {
+    case NARA_UI_2_LISTENING:
+      setNaraUiState(NARA_UI_0_IDLE);
+      break;
+    case NARA_UI_4_OUTPUT:
+      setNaraUiState(NARA_UI_0_IDLE);
+      break;
+    case NARA_UI_MENU:
+      setNaraUiState(naraUiReturnState);
+      break;
+    case NARA_UI_3A_LEXICON:
+    case NARA_UI_3B_HISTORY:
+    case NARA_UI_3C_SETTINGS:
+      setNaraUiState(NARA_UI_MENU);
+      break;
+    case NARA_UI_5A_DETAIL:
+      setNaraUiState(NARA_UI_4_OUTPUT);
+      break;
+    default:
+      break;
+  }
+}
+
+void startNaraUiTest() {
+  initializeNaraButtonState(naraRecordButton);
+  initializeNaraButtonState(naraSelectButton);
+  initializeNaraButtonState(naraBackButton);
+  naraCurrentOutput = NARA_SAMPLE_OUTPUTS[0];
+  naraUiOutputFocusIndex = 0;
+  naraUiOutputMenuArmed = false;
+  naraUiMenuIndex = 0;
+  naraUiHistoryIndex = 0;
+  naraUiSettingsIndex = 0;
+  naraUiDetailGlyphIndex = 0;
+  naraUiLexiconIndex = 0;
+  naraUiIdlePotBucket = 0;
+  naraUiNeedsRender = true;
+  naraUiNeedsFullRefresh = true;
+  naraUiRecordArmed = false;
+  naraUiLastPotBucket = -1;
+  naraUiLastPotBucketChangeMs = millis();
+  setNaraUiState(NARA_UI_1_SPLASH);
+  renderNaraUiScreen();
+}
+
+void processNaraUiTest() {
+  const bool recordChanged = updateNaraButtonState(naraRecordButton);
+  const bool selectChanged = updateNaraButtonState(naraSelectButton);
+  const bool backChanged = updateNaraButtonState(naraBackButton);
+
+  if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_1_SPLASH) {
+    naraUiNeedsFullRefresh = false;
+    naraUiRecordArmed = false;
+    setNaraUiState(NARA_UI_0_IDLE);
+  }
+
+  if (naraUiState == NARA_UI_3_PROCESSING && millis() - naraUiStateStartedMs >= NARA_UI_PROCESS_MS) {
+    naraCurrentOutput = NARA_SAMPLE_OUTPUTS[naraUiSampleCursor % (sizeof(NARA_SAMPLE_OUTPUTS) / sizeof(NARA_SAMPLE_OUTPUTS[0]))];
+    naraUiSampleCursor++;
+    rotateNaraHistory(naraCurrentOutput);
+    naraUiOutputFocusIndex = 0;
+    naraUiOutputMenuArmed = false;
+    setNaraUiState(NARA_UI_4_OUTPUT);
+  }
+
+  if (naraUiState == NARA_UI_0_IDLE && !naraRecordButton.stablePressed) {
+    naraUiRecordArmed = true;
+  }
+
+  if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_0_IDLE && naraUiRecordArmed) {
+    naraUiRecordArmed = false;
+    setNaraUiState(NARA_UI_2_LISTENING);
+  }
+
+  if (recordChanged && !naraRecordButton.stablePressed && naraUiState == NARA_UI_2_LISTENING) {
+    setNaraUiState(NARA_UI_3_PROCESSING);
+  }
+
+  if (selectChanged && naraSelectButton.stablePressed) {
+    handleNaraUiSelectPress();
+  }
+
+  if (backChanged && naraBackButton.stablePressed) {
+    handleNaraUiBackPress();
+  }
+
+  uint8_t stableBucket = 0;
+  uint8_t bucketCount = 0;
+  switch (naraUiState) {
+    case NARA_UI_0_IDLE:
+      bucketCount = 2;
+      break;
+    case NARA_UI_4_OUTPUT:
+      bucketCount = 4;
+      break;
+    case NARA_UI_MENU:
+      bucketCount = 3;
+      break;
+    case NARA_UI_3A_LEXICON:
+      bucketCount = static_cast<uint8_t>(sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]));
+      break;
+    case NARA_UI_3B_HISTORY:
+      bucketCount = 3;
+      break;
+    case NARA_UI_3C_SETTINGS:
+      bucketCount = 4;
+      break;
+    case NARA_UI_5A_DETAIL:
+      bucketCount = 3;
+      break;
+    default:
+      break;
+  }
+
+  if (bucketCount > 0 && readStableNaraUiPotBucket(bucketCount, stableBucket)) {
+    applyNaraUiPotSelection(stableBucket);
+  }
+
+  if ((recordChanged || selectChanged || backChanged) && naraUiState != NARA_UI_1_SPLASH) {
+    naraUiNeedsRender = true;
+  }
+
+  if (naraUiNeedsRender) {
+    renderNaraUiScreen();
+    naraUiNeedsRender = false;
+  }
+}
+
 // ─── VAD: Energy-based voice activity detection ─────────────────────
 // Calculates RMS energy (dBFS) of recorded audio buffer.
 // Returns true if energy exceeds threshold (speech likely present).
@@ -2339,10 +3029,25 @@ void initializeSystem() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(POT_PIN, INPUT);
   pinMode(GALLERY_POT_PIN, INPUT);
+  pinMode(SELECT_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BACK_BUTTON_PIN, INPUT_PULLUP);
   ensureAudioBuffer();
   printHardwareSummary();
   WiFi.onEvent(onWiFiEvent);
   initDisplay();
+
+  if (ENABLE_NARA_UI_TEST) {
+    initI2CDevices();
+    buttonLastRawPressed = readButtonPressedRaw();
+    buttonStablePressed = buttonLastRawPressed;
+    buttonWasPressed = buttonStablePressed;
+    lastButtonRawChangeMs = millis();
+    runHardwareSelfTest();
+    lastSensorMonitorMs = millis();
+    initYamnet();
+    startNaraUiTest();
+    return;
+  }
 
   // ── Boot splash: show Maddi logo for 10 seconds ──
   if (displayReady) {
@@ -2648,6 +3353,13 @@ void setup() {
 
 void loop() {
   processSerialCommands();
+
+  if (ENABLE_NARA_UI_TEST) {
+    processNaraUiTest();
+    delay(10);
+    return;
+  }
+
   processButtonDiagnostics();
   processSensorMonitor();
 

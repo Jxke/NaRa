@@ -4,6 +4,49 @@
 
 This section supersedes older notes below when they conflict.
 
+- The repo now also contains a dedicated Nara demo UI path in [ROCK.ino](/Users/carolinehana/ROCK/ROCK/ROCK.ino), separate from the live consult pipeline.
+  - it is currently enabled with `ENABLE_NARA_UI_TEST = true`
+  - it preserves the existing consult / Supabase / Deepgram / OpenAI code paths in-source
+  - the demo mode is currently what has been compiled and flashed during recent device iteration
+- Nara demo controls currently assume:
+  - record / speech button on `GPIO2`
+  - select button on `GPIO15`
+  - back button on `GPIO16`
+  - Nara demo potentiometer on `GPIO3`
+- The Nara demo boot flow currently starts on a persistent Nara logo splash using [nara_logo.png](/Users/carolinehana/ROCK/ROCK/nara_logo.png), embedded as [nara_logo.h](/Users/carolinehana/ROCK/ROCK/nara_logo.h).
+  - the splash does not auto-dismiss
+  - one press of the speech button transitions from the logo screen to idle
+  - recording is only armed after the button has been released once in idle, so the splash-dismiss click does not begin recording
+- The Nara demo UI currently includes:
+  - splash / logo screen
+  - idle
+  - listening
+  - processing
+  - output
+  - menu
+  - lexicon
+  - history
+  - settings
+  - detail view
+- Current Nara demo output screen behavior:
+  - no `UI_*` frame code labels are shown anymore
+  - header divider is removed on the output screen
+  - the output word is larger and positioned higher
+  - output glyphs are bitmap-driven and enlarged
+  - the third glyph in the sample output is slightly larger than the first two
+- Current sample output set in the demo firmware:
+  - `BECOMING`
+  - glyphs: `venture`, `transformation`, `introspect`
+- Current Nara demo lexicon screen behavior:
+  - circular ring with enlarged center glyph
+  - ring glyphs and center glyph were increased in size from the earlier prototype
+- Current Nara demo settings screen behavior:
+  - toggle values stay right-aligned on one line
+  - the final setting label is now simply `BATTERY`
+- A local browser prototype for the Nara device UI exists at [nara_ui_state_machine.html](/Users/carolinehana/ROCK/nara_ui_state_machine.html).
+  - it was used as a staging surface before firmware changes
+  - supporting NaRa design assets were added under [public/fonts/pp/PPMondwest-Regular.otf](/Users/carolinehana/ROCK/public/fonts/pp/PPMondwest-Regular.otf), [public/fonts/pp/PPNeueBit-Bold.otf](/Users/carolinehana/ROCK/public/fonts/pp/PPNeueBit-Bold.otf), and [public/nara/logomark.svg](/Users/carolinehana/ROCK/public/nara/logomark.svg)
+
 - The live firmware target is still the `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` using Arduino target `esp32:esp32:esp32s3`.
 - Current hotspot defaults are:
   - Wi-Fi SSID: `caroline`
@@ -184,5 +227,5 @@ TEST:Say hello from the OpenAI test path
 
 ## Git Context
 
-- working branch when this file was last updated in-session: `main`
+- working branch when this file was last updated in-session: `Nara`
 - remote: `origin https://github.com/Jxke/ROCK.git`
