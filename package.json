@@ -1,0 +1,19 @@
+{
+  "name": "glyphengine-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Netlify frontend plus local ComfyUI bridge for the GLYPHENGINE workflow.",
+  "scripts": {
+    "worker": "node --env-file=.env worker/server.mjs",
+    "worker:noenv": "node worker/server.mjs",
+    "check": "node --env-file=.env scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sharp": "^0.34.3"
+  }
+}

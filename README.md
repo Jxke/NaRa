@@ -1,214 +1,191 @@
-# ROCK
+# GlyphEngine
 
-This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running a push-to-talk assistant:
+This branch is now a clean Netlify-ready frontend plus a local bridge that runs your ComfyUI workflow headlessly on your own machine.
 
-- INMP441 microphone -> Deepgram STT
-- OpenAI text reply
-- Waveshare 1.54" e-paper captions/status plus a post-reply glyph gallery
-- DRV2605L and MPU6050 on shared I2C
+## What This Actually Does
 
-The old UNO Q / Debian-side flow is obsolete here.
-The temporary `DAZI-AI` import used during early integration has been removed; the active firmware is self-contained in this repo.
+Netlify cannot run ComfyUI with your local GPU, LoRAs, and existing Windows install directly.
+So this project is split into two parts:
 
-## Target Board
+- `site/`: the public frontend Netlify hosts
+- `netlify/functions/`: a Netlify serverless proxy that forwards generation requests
+- `worker/`: the local bridge you run on your own computer next to ComfyUI
 
-- Arduino FQBN base: `esp32:esp32:esp32s3`
-- Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
-- Board ports are host-specific and may change after reconnects.
-  - Windows example: `COM9`
-  - macOS examples seen during this session: `/dev/cu.usbmodem1423101`, `/dev/cu.usbmodem1424101`
+Flow:
 
-## Wiring
+1. A user opens your Netlify URL.
+2. They enter a prompt.
+3. Netlify forwards that request to your public bridge URL.
+4. The bridge patches your `GLYPHENGINE_Qwen_LoRA.json` workflow and submits it to local ComfyUI.
+5. ComfyUI generates the image on your machine.
+6. The bridge fetches the output image from ComfyUI and returns it to Netlify as a data URL.
+7. The browser displays the result.
 
-- INMP441 microphone
-  - `WS -> GPIO4`
-  - `SCK -> GPIO5`
-  - `SD -> GPIO6`
-- Waveshare 1.54" e-paper V2
-  - `DIN -> GPIO11`
-  - `CLK -> GPIO12`
-  - `CS -> GPIO10`
-  - `DC -> GPIO13`
-  - `RST -> GPIO14`
-  - `BUSY -> GPIO9`
-- DRV2605L + MPU6050 shared I2C
-  - `SDA -> GPIO38`
-  - `SCL -> GPIO39`
-- Momentary button
-  - `GPIO2`
-  - configured as `INPUT_PULLUP`
-  - idle = `HIGH`, pressed = `LOW`
-- Potentiometer
-  - `GPIO3`
+## Branch Scope
 
-If any wiring changes, update the pin constants at the top of `ROCK/ROCK.ino`.
+This `glyphengine` branch has been repurposed away from the old ROCK firmware project so it can merge back into `main` cleanly as a self-contained app.
 
-## Build
+## Files
+
+- `site/index.html`: public UI
+- `site/app.js`: prompt submission and result rendering
+- `site/styles.css`: frontend styling
+- `netlify/functions/generate.mjs`: proxy from Netlify to your local bridge
+- `netlify/functions/health.mjs`: public health check
+- `worker/server.mjs`: local authenticated bridge
+- `worker/lib/workflow.mjs`: workflow patching and ComfyUI prompt conversion
+- `.env.example`: required environment variables
+- `CODEX.md`: persistent session context for this branch
+
+## Local Setup
+
+1. Install dependencies:
 
 ```powershell
-./scripts/flash.ps1
+npm install
 ```
 
-Arduino CLI equivalent:
+2. Copy `.env.example` into `.env` if needed and update values.
 
-```bash
-arduino-cli compile --fqbn esp32:esp32:esp32s3 ROCK
-```
+Important values for your current setup:
 
-## Upload
+- `COMFY_WORKFLOW_PATH=C:\Users\Jake\Documents\Art Tech\ComfyUI\user\default\workflows\GLYPHENGINE_Qwen_LoRA.json`
+- `COMFY_POSITIVE_PROMPT_NODE_ID=9`
+- `COMFY_NEGATIVE_PROMPT_NODE_ID=10`
+- `COMFY_SAMPLER_NODE_ID=8`
+- `COMFY_LATENT_NODE_ID=16`
+- `COMFY_SAVE_IMAGE_NODE_ID=20`
+
+3. Start ComfyUI.
+
+Two options:
+
+- Run it yourself.
+- Or set `COMFY_AUTOSTART=true` so the bridge launches `main.py` for you.
+
+If you are using the ComfyUI desktop app on this machine, the actual core entrypoint is:
+
+- `C:\Users\Jake\AppData\Local\Programs\ComfyUI\resources\ComfyUI\main.py`
+
+4. Start the local bridge:
 
 ```powershell
-./scripts/flash.ps1 -Upload
+npm run worker
 ```
 
-If your board is not on `COM9`, pass the correct port:
+5. Check the local bridge:
 
 ```powershell
-./scripts/flash.ps1 -Upload -Port COM10
+Invoke-RestMethod http://127.0.0.1:8787/health
+
+Note for the ComfyUI desktop app on this machine:
+
+- the backend is currently listening on `127.0.0.1:8000`
+- the bridge `.env` has been updated to use `COMFY_API_URL=http://127.0.0.1:8000`
 ```
 
-Arduino CLI equivalents:
+## Exposing Your Computer Safely
 
-```bash
-arduino-cli upload -p /dev/cu.usbmodem1424101 --fqbn esp32:esp32:esp32s3 ROCK
-```
+Do not use raw port forwarding if you can avoid it.
+The practical options are:
 
-```bash
-arduino-cli board list
-```
+1. Cloudflare Tunnel
+2. Tailscale Funnel
+3. ngrok
 
-## Runtime Configuration
+Best default:
 
-Secrets are provisioned over serial and stored in `Preferences`.
+- use a tunnel to publish `http://127.0.0.1:8787`
+- require `BRIDGE_TOKEN`
+- keep ComfyUI itself bound to `127.0.0.1`
 
-`Preferences` is the ESP32 persistent key-value store used for:
+The public URL from that tunnel becomes:
 
-- Wi-Fi SSID/password
-- Deepgram/OpenAI keys
-- model settings
-- `systemPrompt`
+- `COMFY_BRIDGE_URL` in Netlify
 
-The sketch now boots with these Wi-Fi defaults unless you override them over serial:
+## Netlify Setup
 
-- `wifi_ssid`: `caroline`
-- `wifi_password`: `caroline#1`
+Create a new Netlify site from this `glyphengine` branch.
 
-Manual JSON format:
+Set these environment variables in Netlify:
+
+- `COMFY_BRIDGE_URL`
+- `COMFY_BRIDGE_TOKEN`
+
+This project uses:
+
+- publish directory: `site`
+- functions directory: `netlify/functions`
+
+Those are already defined in `netlify.toml`.
+
+## API
+
+### `POST /generate` on the local bridge
+
+Request body:
 
 ```json
-{"wifi_ssid":"caroline","wifi_password":"caroline#1","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
+{
+  "prompt": "naraglyph, monochrome advisory glyph, lonely at the top of a mountain",
+  "negativePrompt": "text",
+  "width": 256,
+  "height": 256,
+  "steps": 8,
+  "cfg": 8,
+  "seed": 359372081652883
+}
 ```
 
-Helper script:
+The bridge:
+
+- updates the positive prompt node
+- optionally updates the negative prompt node
+- updates sampler values
+- updates latent size
+- submits the job to ComfyUI
+- returns generated images as `dataUrl`
+
+## Verification
+
+Workflow conversion check:
 
 ```powershell
-./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -OpenAIApiKey "YOUR_OPENAI_KEY"
+npm run check
 ```
 
-Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO3` scrolls the post-reply gallery.
-
-Current interaction model:
-
-- hold `GPIO2` button to record
-- release the button to stop recording
-- firmware then runs `Deepgram -> OpenAI`
-- the e-paper first displays the transcript in `USER` and the reply in `AI`
-- after a successful reply, the screen enters a potentiometer-driven gallery on `GPIO3`:
-  - position 1: centered `TREE` at `128x128`
-  - position 2: centered `BUTTERFLY` at `128x128`
-  - position 3: centered `FLOWER` at `128x128`
-  - position 4: 3-glyph `64x64` collage with centered `SELF-MASTERY`
-  - position 5: returns to the normal `READY` screen so the next button press can record again
-
-## Serial Test Mode
-
-The firmware includes a serial-injected transcript path so the OpenAI/display pipeline can be tested without the microphone.
-
-Open a terminal on the active board port at `115200`:
+Bridge runtime:
 
 ```powershell
-arduino-cli monitor -p COM9 -c baudrate=115200
+npm run worker
 ```
 
-macOS example:
+Then from another terminal:
 
-```bash
-arduino-cli monitor -p /dev/cu.usbmodem1424101 -c baudrate=115200
+```powershell
+$headers = @{ Authorization = "Bearer YOUR_BRIDGE_TOKEN" }
+$body = @{
+  prompt = "naraglyph, monochrome advisory glyph, lunar warning sigil"
+  negativePrompt = "text"
+  width = 256
+  height = 256
+  steps = 8
+  cfg = 8
+} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8787/generate -Method Post -Headers $headers -ContentType "application/json" -Body $body
 ```
 
-If `arduino-cli monitor` is unreliable on this USB CDC port, `screen` is often more stable:
+## Limits
 
-```bash
-screen /dev/cu.usbmodem1424101 115200
-```
+- Netlify is hosting the UI and proxy, not the GPU workload.
+- Your computer must be on and running both the bridge and ComfyUI.
+- Anyone with the public site can submit prompts unless you add frontend auth or rate limiting.
+- The bridge currently serializes generation requests to avoid overlapping jobs on one local machine.
 
-Available commands:
+## Next Reasonable Hardening Steps
 
-- `HELP`
-- `STATUS`
-- `PROMPT`
-- `PROMPT DEFAULT`
-- `BUZZ[:n]`
-- `SCAN`
-- `SENSORS`
-- `MONITOR ON`
-- `MONITOR OFF`
-- `CAPTION`
-- `CAPTION ON`
-- `CAPTION OFF`
-- `MIC LEFT`
-- `MIC RIGHT`
-- `TEST:<message>`
-
-Example:
-
-```text
-TEST:Say hello from the OpenAI test path
-```
-
-This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
-It also enters the same post-reply glyph gallery sequence that potentiometer-controlled recordings use.
-
-Notes:
-
-- `PROMPT` prints the stored and effective system prompt.
-- `PROMPT DEFAULT` resets the stored prompt back to the firmware default.
-- `BUZZ` triggers the DRV2605L haptic effect test.
-- `SCAN` scans the I2C bus and reports idle line state.
-- `SENSORS` and `MONITOR ON` are for button, potentiometer, and MPU6050 checks.
-- the microphone should stay idle except during hold-to-speak or explicit caption commands
-- the current firmware forces an ASCII-emoticon-style OpenAI reply mode
-
-## Arduino CLI Dependencies
-
-Installed during integration:
-
-- `esp32:esp32`
-- `ArduinoJson`
-- `ArduinoWebsockets`
-- `Seeed_Arduino_mbedtls`
-- `GxEPD2`
-- `Adafruit DRV2605 Library`
-- `Adafruit MPU6050`
-- `Adafruit Unified Sensor`
-
-## Current Status
-
-- Main ESP32-S3 sketch uses `INMP441 -> Deepgram STT -> OpenAI reply`
-- E-paper uses the older fixed layout for live interaction:
-  - `ROCK` header
-  - `WiFi:` / `POT:` row
-  - `USER`
-  - `AI`
-- After a successful reply, the potentiometer on `GPIO3` cycles a glyph gallery:
-  - `TREE` `128x128`
-  - `BUTTERFLY` `128x128`
-  - `FLOWER` `128x128`
-  - `TREE + BUTTERFLY + FLOWER` at `64x64` with centered `SELF-MASTERY`
-- Arduino CLI build/upload helper added
-- Serial provisioning helper added
-- Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs
-- Serial `TEST:` mode added for non-mic pipeline checks
-- Boot-time and live serial hardware diagnostics added
-- `DRV2605L` is detected over I2C, but physical motor vibration still needs hardware validation with `BUZZ`
-- `MPU6050` has been verified working over serial
+- add simple frontend auth
+- add rate limiting at the bridge
+- store outputs to object storage instead of returning base64
+- add a prompt queue UI
+- log job metadata and failures

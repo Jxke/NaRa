@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GlyphEngine</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Netlify UI + Local ComfyUI Bridge</p>
+        <h1>GlyphEngine</h1>
+        <p class="lede">
+          Prompt a public page. Route the request through Netlify. Generate on your own machine with
+          the headless GLYPHENGINE Qwen LoRA workflow.
+        </p>
+      </section>
+
+      <section class="workspace">
+        <section class="card control-panel">
+          <form id="generate-form">
+            <label>
+              Prompt
+              <textarea id="prompt" name="prompt" rows="5" placeholder="lonely at the top of a mountain" required></textarea>
+            </label>
+
+            <label>
+              Negative Prompt
+              <input id="negativePrompt" name="negativePrompt" type="text" placeholder="text" />
+            </label>
+
+            <div class="grid">
+              <label>
+                Width
+                <input id="width" name="width" type="number" min="64" step="64" value="256" />
+              </label>
+
+              <label>
+                Height
+                <input id="height" name="height" type="number" min="64" step="64" value="256" />
+              </label>
+
+              <label>
+                Steps
+                <input id="steps" name="steps" type="number" min="1" value="8" />
+              </label>
+
+              <label>
+                CFG
+                <input id="cfg" name="cfg" type="number" min="0" step="0.5" value="8" />
+              </label>
+            </div>
+
+            <label>
+              Seed
+              <input id="seed" name="seed" type="number" placeholder="Leave blank to use workflow seed" />
+            </label>
+
+            <button id="submit-button" type="submit">Generate</button>
+          </form>
+
+          <div class="status-row">
+            <button id="health-button" type="button" class="secondary">Check Bridge</button>
+            <p id="status" aria-live="polite">Idle.</p>
+          </div>
+        </section>
+
+        <section class="results" id="results">
+          <article class="result-card result-placeholder">
+            <p>Latest image will appear here.</p>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
