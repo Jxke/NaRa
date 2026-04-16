@@ -8,67 +8,98 @@
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
-        <p class="eyebrow">Netlify UI + Local ComfyUI Bridge</p>
-        <h1>GlyphEngine</h1>
-        <p class="lede">
-          Prompt a public page. Route the request through Netlify. Generate on your own machine with
-          the headless GLYPHENGINE Qwen LoRA workflow.
-        </p>
-      </section>
+      <header class="hero">
+        <p class="eyebrow">NaRa Glyph Engine / Bitmap Oracle</p>
+        <div class="hero-rule"></div>
+        <div class="hero-copy">
+          <div>
+            <h1>Generate<br />bitmap glyphs.</h1>
+            <p class="lede">
+              A low-resolution glyph console for the GLYPHENGINE workflow. Prompt on the left. Read the
+              rendered bitmap on the right.
+            </p>
+          </div>
+          <aside class="hero-meta">
+            <p class="meta-label">System</p>
+            <p class="meta-value">PP Mondwest + PP NeueBit</p>
+            <p class="meta-label">Output</p>
+            <p class="meta-value">128 x 128 bitmap renderer</p>
+          </aside>
+        </div>
+      </header>
 
-      <section class="workspace">
-        <section class="card control-panel">
+      <section class="workspace" aria-label="Glyph console">
+        <section class="control-panel">
+          <div class="section-header">
+            <p class="section-kicker">Input</p>
+            <h2>Prompt Console</h2>
+          </div>
+
+          <div class="panel-rule"></div>
+
           <form id="generate-form">
             <label>
-              Prompt
+              <span class="label-text">Prompt</span>
               <textarea id="prompt" name="prompt" rows="5" placeholder="lonely at the top of a mountain" required></textarea>
             </label>
 
             <label>
-              Negative Prompt
+              <span class="label-text">Negative Prompt</span>
               <input id="negativePrompt" name="negativePrompt" type="text" placeholder="text" />
             </label>
 
             <div class="grid">
               <label>
-                Width
+                <span class="label-text">Width</span>
                 <input id="width" name="width" type="number" min="64" step="64" value="256" />
               </label>
 
               <label>
-                Height
+                <span class="label-text">Height</span>
                 <input id="height" name="height" type="number" min="64" step="64" value="256" />
               </label>
 
               <label>
-                Steps
+                <span class="label-text">Steps</span>
                 <input id="steps" name="steps" type="number" min="1" value="8" />
               </label>
 
               <label>
-                CFG
+                <span class="label-text">Cfg</span>
                 <input id="cfg" name="cfg" type="number" min="0" step="0.5" value="8" />
               </label>
             </div>
 
             <label>
-              Seed
+              <span class="label-text">Seed</span>
               <input id="seed" name="seed" type="number" placeholder="Leave blank to use workflow seed" />
             </label>
 
-            <button id="submit-button" type="submit">Generate</button>
+            <div class="button-row">
+              <button id="submit-button" type="submit">Generate</button>
+              <button id="health-button" type="button" class="secondary">Check Bridge</button>
+            </div>
           </form>
 
-          <div class="status-row">
-            <button id="health-button" type="button" class="secondary">Check Bridge</button>
+          <div class="status-box">
+            <p class="status-label">Status</p>
             <p id="status" aria-live="polite">Idle.</p>
           </div>
         </section>
 
-        <section class="results" id="results">
+        <section class="results" id="results" aria-label="Bitmap output">
+          <div class="section-header">
+            <p class="section-kicker">Output</p>
+            <h2>Bitmap Renderer</h2>
+          </div>
+
+          <div class="panel-rule"></div>
+
           <article class="result-card result-placeholder">
-            <p>Latest image will appear here.</p>
+            <div class="bitmap-stage bitmap-stage-empty">
+              <p>Latest image will appear here.</p>
+            </div>
+            <p class="bitmap-meta">Waiting for generation</p>
           </article>
         </section>
       </section>

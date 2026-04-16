@@ -20,10 +20,14 @@ function renderImages(images) {
     const article = document.createElement("article");
     article.className = "result-card";
 
+    const stage = document.createElement("div");
+    stage.className = "bitmap-stage";
+
     const canvas = document.createElement("canvas");
     canvas.width = image.width ?? 128;
     canvas.height = image.height ?? 128;
     canvas.className = "bitmap-canvas";
+    stage.append(canvas);
 
     const download = document.createElement("a");
     download.href = image.dataUrl;
@@ -34,7 +38,7 @@ function renderImages(images) {
     meta.className = "bitmap-meta";
     meta.textContent = `${canvas.width}x${canvas.height} bitmap`;
 
-    article.append(canvas, meta, download);
+    article.append(stage, meta, download);
     resultsNode.append(article);
 
     renderBitmapToCanvas(canvas, image.dataUrl);

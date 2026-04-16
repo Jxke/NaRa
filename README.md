@@ -77,12 +77,37 @@ npm run worker
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8787/health
+```
 
 Note for the ComfyUI desktop app on this machine:
 
 - the backend is currently listening on `127.0.0.1:8000`
 - the bridge `.env` has been updated to use `COMFY_API_URL=http://127.0.0.1:8000`
+
+## One-Command Start And Stop
+
+To start the full local stack from this repo:
+
+```powershell
+npm start
 ```
+
+That command will:
+
+- launch the ComfyUI desktop app if the ComfyUI API is not already up
+- start the local bridge on `127.0.0.1:8787` if it is not already running
+- start a Cloudflare quick tunnel to the local bridge
+
+To stop the processes started by `npm start`:
+
+```powershell
+npm stop
+```
+
+Notes:
+
+- on Windows PowerShell, use `npm.cmd start` and `npm.cmd stop` if execution policy blocks `npm`
+- the quick tunnel URL is temporary and changes each time it is started
 
 ## Exposing Your Computer Safely
 

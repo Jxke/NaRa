@@ -4,6 +4,7 @@ dist/
 coverage/
 logs/
 tmp/
+.runtime/
 
 .env
 .env.local

@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Netlify frontend plus local ComfyUI bridge for the GLYPHENGINE workflow.",
   "scripts": {
+    "start": "node --env-file=.env scripts/start.mjs",
+    "stop": "node --env-file=.env scripts/stop.mjs",
     "worker": "node --env-file=.env worker/server.mjs",
     "worker:noenv": "node worker/server.mjs",
     "check": "node --env-file=.env scripts/check.mjs"
