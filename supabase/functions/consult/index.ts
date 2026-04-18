@@ -34,7 +34,7 @@ const DEEPGRAM_URL =
   "&smart_format=true" +
   "&language=en-US";
 
-const FALLBACK_GLYPHS: readonly string[] = ["spiral", "mirror", "bridge"];
+const FALLBACK_GLYPHS: readonly string[] = ["venture", "clarity", "bond"];
 const FALLBACK_WORD = "reflect";
 const MAX_WORD_LENGTH = 15;
 const REQUIRED_GLYPH_COUNT = 3;
@@ -65,6 +65,9 @@ const PICKER_SYSTEM_PROMPT =
   "selected prompts, not from any single glyph alone. The word should not " +
   "be a synonym of one glyph; it should feel open-ended, directional, and " +
   "emergent from the trio as a whole. " +
+  "You MUST choose only from the exact glyph IDs provided in the Available glyphs list. " +
+  "Copy those IDs verbatim. Do not invent IDs. Do not rename IDs. Do not change spacing, " +
+  "punctuation, plurality, or casing. If uncertain, reuse exact IDs from the list. " +
   "Pick 1 companion word (max 15 chars, lowercase). " +
   "You MUST respond with ONLY this exact JSON format, nothing else:\n" +
   '{"glyphs": ["id1", "id2", "id3"], "word": "yourword"}\n' +
@@ -374,6 +377,78 @@ function parsePickerResponse(raw: string): PickerResult {
   };
 }
 
+function canonicalGlyphId(value: string): string {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+}
+
+const LEGACY_GLYPH_ALIASES = new Map<string, string>([
+  ["spiral", "venture"],
+  ["mirror", "clarity"],
+  ["bridge", "bond"],
+]);
+
+function normalizePickerResult(
+  result: PickerResult,
+  validGlyphIds: readonly string[],
+): PickerResult {
+  const glyphIdMap = new Map<string, string>();
+  for (const id of validGlyphIds) {
+    glyphIdMap.set(canonicalGlyphId(id), id);
+  }
+
+  return {
+    glyphs: result.glyphs.map((id) => {
+      const canonical = canonicalGlyphId(id);
+      const aliased = LEGACY_GLYPH_ALIASES.get(canonical) ?? canonical;
+      return glyphIdMap.get(aliased) ?? glyphIdMap.get(canonical) ?? id.trim().toLowerCase();
+    }),
+    word: result.word.trim().toLowerCase(),
+  };
+}
+
+function repairGlyphSelection(
+  glyphs: readonly string[],
+  validGlyphIds: readonly string[],
+): string[] {
+  const glyphIdMap = new Map<string, string>();
+  for (const id of validGlyphIds) {
+    glyphIdMap.set(canonicalGlyphId(id), id);
+  }
+
+  const repaired: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawId of glyphs) {
+    const canonical = canonicalGlyphId(rawId);
+    const aliased = LEGACY_GLYPH_ALIASES.get(canonical) ?? canonical;
+    const resolved = glyphIdMap.get(aliased) ?? glyphIdMap.get(canonical);
+    if (!resolved || seen.has(resolved)) continue;
+    repaired.push(resolved);
+    seen.add(resolved);
+    if (repaired.length === REQUIRED_GLYPH_COUNT) return repaired;
+  }
+
+  for (const fallback of FALLBACK_GLYPHS) {
+    if (seen.has(fallback)) continue;
+    repaired.push(fallback);
+    seen.add(fallback);
+    if (repaired.length === REQUIRED_GLYPH_COUNT) break;
+  }
+
+  return repaired;
+}
+
+function normalizeAndValidatePickerResult(
+  result: PickerResult,
+  validGlyphIds: readonly string[],
+): { pickerResult: PickerResult; validationError: string | null } {
+  const pickerResult = normalizePickerResult(result, validGlyphIds);
+  return {
+    pickerResult,
+    validationError: validatePickerResult(pickerResult, new Set(validGlyphIds)),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Stage 4: Constraint Validation
 // ---------------------------------------------------------------------------
@@ -488,7 +563,8 @@ serve(async (req: Request) => {
     return errorResponse("Failed to load context", 502, detail);
   }
 
-  const validGlyphIds = new Set(glyphRows.map((g) => g.id));
+  const validGlyphIdList = glyphRows.map((g) => g.id);
+  const validGlyphIds = new Set(validGlyphIdList);
   const glyphInventoryText = formatGlyphInventory(glyphRows);
 
   // -----------------------------------------------------------------------
@@ -511,8 +587,10 @@ serve(async (req: Request) => {
 
   try {
     // First attempt
-    let pickerResult = await runGlyphPicker(reasoning, glyphInventoryText);
-    let validationError = validatePickerResult(pickerResult, validGlyphIds);
+    let { pickerResult, validationError } = normalizeAndValidatePickerResult(
+      await runGlyphPicker(reasoning, glyphInventoryText),
+      validGlyphIdList,
+    );
 
     if (validationError !== null) {
       // Retry once with stricter prompt
@@ -521,8 +599,10 @@ serve(async (req: Request) => {
         "from the list. Your previous response was invalid.";
 
       try {
-        pickerResult = await runGlyphPicker(reasoning, glyphInventoryText, retryHint);
-        validationError = validatePickerResult(pickerResult, validGlyphIds);
+        ({ pickerResult, validationError } = normalizeAndValidatePickerResult(
+          await runGlyphPicker(reasoning, glyphInventoryText, retryHint),
+          validGlyphIdList,
+        ));
       } catch {
         validationError = "Retry also failed to parse";
       }
@@ -533,7 +613,7 @@ serve(async (req: Request) => {
       selectedGlyphs = [...FALLBACK_GLYPHS];
       selectedWord = FALLBACK_WORD;
     } else {
-      selectedGlyphs = pickerResult.glyphs;
+      selectedGlyphs = repairGlyphSelection(pickerResult.glyphs, validGlyphIdList);
       selectedWord = pickerResult.word;
     }
   } catch {
@@ -543,14 +623,16 @@ serve(async (req: Request) => {
       "from the list. Your previous response was invalid.";
 
     try {
-      const retryResult = await runGlyphPicker(reasoning, glyphInventoryText, retryHint);
-      const retryError = validatePickerResult(retryResult, validGlyphIds);
+      const { pickerResult: retryResult, validationError: retryError } = normalizeAndValidatePickerResult(
+        await runGlyphPicker(reasoning, glyphInventoryText, retryHint),
+        validGlyphIdList,
+      );
 
       if (retryError !== null) {
         selectedGlyphs = [...FALLBACK_GLYPHS];
         selectedWord = FALLBACK_WORD;
       } else {
-        selectedGlyphs = retryResult.glyphs;
+        selectedGlyphs = repairGlyphSelection(retryResult.glyphs, validGlyphIdList);
         selectedWord = retryResult.word;
       }
     } catch {

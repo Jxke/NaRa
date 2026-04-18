@@ -4,21 +4,20 @@
 
 This section supersedes older notes below when they conflict.
 
-- The repo now also contains a dedicated Nara demo UI path in [ROCK.ino](/Users/carolinehana/ROCK/ROCK/ROCK.ino), separate from the live consult pipeline.
-  - it is currently enabled with `ENABLE_NARA_UI_TEST = true`
-  - it preserves the existing consult / Supabase / Deepgram / OpenAI code paths in-source
-  - the demo mode is currently what has been compiled and flashed during recent device iteration
-- Nara demo controls currently assume:
-  - record / speech button on `GPIO2`
-  - select button on `GPIO15`
-  - back button on `GPIO16`
-  - Nara demo potentiometer on `GPIO3`
-- The Nara demo boot flow currently starts on a persistent Nara logo splash using [nara_logo.png](/Users/carolinehana/ROCK/ROCK/nara_logo.png), embedded as [nara_logo.h](/Users/carolinehana/ROCK/ROCK/nara_logo.h).
-  - the splash does not auto-dismiss
-  - one press of the speech button transitions from the logo screen to idle
-  - recording is only armed after the button has been released once in idle, so the splash-dismiss click does not begin recording
-- The Nara demo UI currently includes:
-  - splash / logo screen
+- The active device firmware is the Nara UI flow in [ROCK.ino](/Users/carolinehana/ROCK/ROCK/ROCK.ino), and it is currently enabled with `ENABLE_NARA_UI_TEST = true`.
+- The Nara path is no longer a fake sample-only demo. It is the live consult path that:
+  - records from the device mic
+  - runs Deepgram STT
+  - calls the Supabase `/consult` function
+  - renders a companion word plus 3 bitmap glyphs on the e-paper output screen
+- Current Nara controls assume:
+  - record button on `GPIO2`
+  - select button on `GPIO1`
+  - back button on `GPIO7`
+  - rotary encoder `CLK` on `GPIO8`
+  - rotary encoder `DT` on `GPIO3`
+- Current Nara screen flow:
+  - logo-only splash using [nara_logo.h](/Users/carolinehana/ROCK/ROCK/nara_logo.h)
   - idle
   - listening
   - processing
@@ -27,22 +26,11 @@ This section supersedes older notes below when they conflict.
   - lexicon
   - history
   - settings
-  - detail view
-- Current Nara demo output screen behavior:
-  - no `UI_*` frame code labels are shown anymore
-  - header divider is removed on the output screen
-  - the output word is larger and positioned higher
-  - output glyphs are bitmap-driven and enlarged
-  - the third glyph in the sample output is slightly larger than the first two
-- Current sample output set in the demo firmware:
-  - `BECOMING`
-  - glyphs: `venture`, `transformation`, `introspect`
-- Current Nara demo lexicon screen behavior:
-  - circular ring with enlarged center glyph
-  - ring glyphs and center glyph were increased in size from the earlier prototype
-- Current Nara demo settings screen behavior:
-  - toggle values stay right-aligned on one line
-  - the final setting label is now simply `BATTERY`
+  - detail
+- Current Nara visual behavior:
+  - splash shows only the Nara logo, no header/footer chrome
+  - the old `ROCK` status layout should not appear during the Nara record/consult flow
+  - the output screen shows bitmap glyphs only, not raw glyph IDs
 - A local browser prototype for the Nara device UI exists at [nara_ui_state_machine.html](/Users/carolinehana/ROCK/nara_ui_state_machine.html).
   - it was used as a staging surface before firmware changes
   - supporting NaRa design assets were added under [public/fonts/pp/PPMondwest-Regular.otf](/Users/carolinehana/ROCK/public/fonts/pp/PPMondwest-Regular.otf), [public/fonts/pp/PPNeueBit-Bold.otf](/Users/carolinehana/ROCK/public/fonts/pp/PPNeueBit-Bold.otf), and [public/nara/logomark.svg](/Users/carolinehana/ROCK/public/nara/logomark.svg)
@@ -53,14 +41,22 @@ This section supersedes older notes below when they conflict.
   - Wi-Fi password: `caroline#1`
 - Device settings are persisted in ESP32 `Preferences` and can override compile-time defaults unless code explicitly migrates or forces them. This includes:
   - Wi-Fi SSID/password
-  - Deepgram/OpenAI keys
+  - Deepgram key
+  - Supabase URL
+  - Supabase anon key
+  - device API key
+  - optional OpenAI key for legacy test paths
   - model settings
   - `systemPrompt`
 - The button is on `GPIO2` and is wired as `INPUT_PULLUP`.
   - idle = `HIGH`
   - pressed = `LOW`
-  - current interaction is hold-to-speak from `READY`: press starts mic capture, release stops capture and runs Deepgram -> OpenAI
-  - after a successful reply, the gallery is controlled by the potentiometer on `GPIO3`
+  - current interaction is hold-to-speak inside the Nara flow: press starts mic capture, release stops capture and runs Deepgram -> Supabase consult
+- Nara controls:
+  - encoder `CLK -> GPIO8`
+  - encoder `DT -> GPIO3`
+  - select `GPIO1`
+  - back `GPIO7`
 - The mic is an `INMP441` on:
   - `WS -> GPIO4`
   - `SCK -> GPIO5`
@@ -78,18 +74,13 @@ This section supersedes older notes below when they conflict.
 - The `DRV2605L` is controlled over I2C. Its `IN` pin is not required for the current firmware mode.
 - The attached vibration motor is a 2-wire ERM motor, not an LRA.
 - The IMU has been verified working over serial. The haptic driver is detected over I2C, but physical motor vibration has been inconsistent and should still be validated with `BUZZ`.
-- The default display behavior is the older fixed layout with:
-  - `ROCK` header
-  - `WiFi:` / `POT:` row
-  - `USER` section
-  - `AI` section
-- The active consult path now prefers the Supabase-backed glyph pipeline when `USE_MADDI_PIPELINE = true`.
+- The active consult path uses the Supabase-backed glyph pipeline when `USE_MADDI_PIPELINE = true`.
   - firmware posts recorded WAV audio to `/consult`
+  - firmware also posts ambient captures to `/ingest-audio`
+  - both requests now send `Authorization`, `apikey`, and `X-Device-Key`
   - the backend returns exactly 3 glyph IDs plus 1 companion word
   - firmware stores those in `consultGlyphIds[3]` and `consultWord`
-  - the final e-ink consult screen renders the word at the top, two glyph bitmaps on the upper row, one centered below, and `NARA` as the footer label
-- The old potentiometer gallery path still exists in the codebase, but the consult result path is now a separate bitmap-driven layout rather than text-only glyph IDs.
-- The potentiometer is on `GPIO3`. It now controls gallery selection after a successful reply.
+  - the final e-ink consult screen renders bitmap glyphs plus the companion word
 - A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
 - Serial helpers worth remembering:
   - `HELP`
@@ -110,6 +101,10 @@ This section supersedes older notes below when they conflict.
   - `REASONER_SYSTEM_PROMPT` extracts the human situation with emphasis on emotional state, core tension, and directional pull
   - `PICKER_SYSTEM_PROMPT` selects 3 glyphs as a meaningful trio and derives the final word from the combined meaning of their reflective prompts
 - The glyph schema has moved from `stories` to `prompt_questions`, and `labels` were removed.
+- The live Supabase project `tsblsjjlrjnllsqyusmb` was updated in-session:
+  - migrations `00007` and `00008` were applied
+  - `consult` was redeployed
+  - `seed.sql` was pushed so `public.glyphs` now matches the local 42-glyph inventory
 - The current glyph dataset is 42 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
 - Firmware bitmap assets for consult glyphs are generated into [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) from `glyphs/*.bmp` using [generate_consult_glyph_header.js](/Users/carolinehana/ROCK/scripts/generate_consult_glyph_header.js).
 - Local visual reference for the consult result screen lives at [consult_preview.html](/Users/carolinehana/ROCK/consult_preview.html).
@@ -124,7 +119,8 @@ Current architecture:
 - push-to-talk input on ESP32-S3
 - INMP441 microphone capture
 - Deepgram for speech-to-text
-- OpenAI for text response generation
+- Supabase Edge Functions for consultation and ambient ingest
+- optional OpenAI path retained only for legacy serial test mode
 - no TTS in the current design
 - Waveshare 1.54" e-paper display for captions and status
 - DRV2605L for haptic feedback
@@ -161,8 +157,14 @@ Pin mapping:
   - `SCL -> GPIO39`
 - Momentary button
   - `GPIO2`
-- Potentiometer
+- Rotary encoder DT
   - `GPIO3`
+- Rotary encoder CLK
+  - `GPIO8`
+- Select button
+  - `GPIO1`
+- Back button
+  - `GPIO7`
 
 ## Decisions Made
 
@@ -220,12 +222,12 @@ TEST:Say hello from the OpenAI test path
 - firmware uploaded successfully to the board
 - serial `TEST:` path works per user report
 - Wi-Fi verified connected to `caroline`
-- potentiometer-driven glyph gallery verified in firmware build/upload flow
+- Nara UI flow compiled, flashed, and iterated in-session
 - Supabase consult backend scaffolding, seed data, migrations, and tests are in repo
 - consult result preview exists locally in browser form
 - consult bitmap rendering path is implemented in firmware source
 
 ## Git Context
 
-- working branch when this file was last updated in-session: `Nara`
+- current active branch after later session work: `nara_demo`
 - remote: `origin https://github.com/Jxke/ROCK.git`

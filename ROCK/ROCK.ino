@@ -57,8 +57,10 @@ constexpr char PRIOR_DEFAULT_SYSTEM_PROMPT[] =
 constexpr int BUTTON_PIN = 2;
 constexpr int POT_PIN = 8;
 constexpr int GALLERY_POT_PIN = 3;
-constexpr int SELECT_BUTTON_PIN = 15;
-constexpr int BACK_BUTTON_PIN = 16;
+constexpr int ENCODER_CLK_PIN = GALLERY_POT_PIN;
+constexpr int ENCODER_DT_PIN = POT_PIN;
+constexpr int SELECT_BUTTON_PIN = 1;
+constexpr int BACK_BUTTON_PIN = 7;
 constexpr int NARA_UI_POT_PIN = GALLERY_POT_PIN;
 
 constexpr int MIC_WS_PIN = 4;
@@ -106,10 +108,11 @@ constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
 constexpr bool ENABLE_HAPTIC = true;
 constexpr bool ENABLE_IMU = true;
 constexpr bool ENABLE_BUTTON_PTT = true;
-constexpr bool ENABLE_NARA_UI_TEST = true;  // test harness; disable to restore live consultation flow
+constexpr bool ENABLE_NARA_UI_TEST = true;  // use the Nara UI flow with live consultation
 constexpr uint32_t NARA_UI_SPLASH_MS = 5000;
 constexpr uint32_t NARA_UI_PROCESS_MS = 1600;
 constexpr unsigned long NARA_UI_POT_SETTLE_MS = 120;
+constexpr unsigned long ENCODER_DEBOUNCE_MS = 2;
 
 constexpr uint32_t STATUS_PARTIAL_X = 0;
 constexpr uint32_t STATUS_PARTIAL_Y = 0;
@@ -147,6 +150,7 @@ String deepgramLanguage = DEFAULT_DEEPGRAM_LANGUAGE;
 String systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
 String supabaseUrl;
+String supabaseAnonKey;
 String deviceApiKey;
 constexpr bool USE_MADDI_PIPELINE = true;  // toggle: true = Supabase, false = direct OpenAI
 
@@ -247,6 +251,9 @@ enum NaraUiState {
   NARA_UI_5A_DETAIL
 };
 
+void setNaraUiState(NaraUiState nextState);
+void renderNaraUiScreen();
+
 struct NaraButtonState {
   uint8_t pin;
   bool idleLevel;
@@ -259,6 +266,8 @@ struct NaraSampleOutput {
   const char* word;
   const char* glyphs[3];
 };
+
+void rotateNaraHistory(const NaraSampleOutput& newest);
 
 struct NaraSettingItem {
   const char* label;
@@ -273,6 +282,10 @@ constexpr NaraSampleOutput NARA_SAMPLE_OUTPUTS[] = {
   {"BECOMING", {"venture", "transformation", "introspect"}},
   {"ALIGNMENT", {"balance", "clarity", "progression"}},
   {"REFRAMING", {"ripple", "conflict", "harmony"}},
+};
+
+constexpr const char* NARA_SAFE_GALLERY_GLYPHS[3] = {
+  "venture", "clarity", "bond",
 };
 
 constexpr const char* NARA_LEXICON_GLYPHS[] = {
@@ -316,6 +329,14 @@ bool naraUiNeedsRender = true;
 bool naraUiNeedsFullRefresh = true;
 bool naraUiRecordArmed = false;
 NaraSampleOutput naraCurrentOutput = NARA_SAMPLE_OUTPUTS[0];
+String naraCurrentWord;
+String naraCurrentGlyphs[3];
+String naraUiTranscript;
+String naraUiProcessingStatus = "GLYPHS IN FLIGHT";
+int32_t encoderPosition = 0;
+int encoderLastClkState = HIGH;
+unsigned long encoderLastEdgeMs = 0;
+int32_t naraUiLastEncoderPosition = 0;
 
 bool writeI2CRegister8(uint8_t address, uint8_t reg, uint8_t value);
 bool readI2CRegister8(uint8_t address, uint8_t reg, uint8_t& value);
@@ -406,12 +427,23 @@ bool hasWifiConfig() {
   return !wifiSsid.isEmpty() && !wifiPassword.isEmpty();
 }
 
-bool hasCloudConfig() {
+bool hasDeepgramConfig() {
+  return !deepgramApiKey.isEmpty();
+}
+
+bool hasSupabaseConfig() {
+  return !supabaseUrl.isEmpty() && !supabaseAnonKey.isEmpty() && !deviceApiKey.isEmpty();
+}
+
+bool hasLegacyAiConfig() {
   return !deepgramApiKey.isEmpty() && !openaiApiKey.isEmpty();
 }
 
-bool hasDeepgramConfig() {
-  return !deepgramApiKey.isEmpty();
+bool hasCloudConfig() {
+  if (USE_MADDI_PIPELINE) {
+    return hasDeepgramConfig() && hasSupabaseConfig();
+  }
+  return hasLegacyAiConfig();
 }
 
 bool canRunCaptionMode() {
@@ -469,15 +501,38 @@ String truncateForDisplay(const String& input, size_t maxLen) {
   return input.substring(0, maxLen - 3) + "...";
 }
 
+int positiveModulo(int value, int modulus) {
+  if (modulus <= 0) return 0;
+  int result = value % modulus;
+  return (result < 0) ? result + modulus : result;
+}
+
+void updateRotaryEncoder() {
+  const int clkState = digitalRead(ENCODER_CLK_PIN);
+  if (clkState == encoderLastClkState) return;
+
+  const unsigned long now = millis();
+  if (now - encoderLastEdgeMs < ENCODER_DEBOUNCE_MS) {
+    encoderLastClkState = clkState;
+    return;
+  }
+
+  encoderLastEdgeMs = now;
+  const int dtState = digitalRead(ENCODER_DT_PIN);
+  if (dtState != clkState) {
+    encoderPosition++;
+  } else {
+    encoderPosition--;
+  }
+  encoderLastClkState = clkState;
+}
+
 int responseWordLimit() {
-  const int raw = analogRead(POT_PIN);
-  return map(raw, 0, 4095, 12, 80);
+  return 12 + positiveModulo(static_cast<int>(encoderPosition), 69);
 }
 
 uint8_t galleryStepFromPot() {
-  const int raw = analogRead(GALLERY_POT_PIN);
-  const long constrained = constrain(raw, 0, 4095);
-  return static_cast<uint8_t>(map(constrained, 0, 4095, 0, 4));
+  return static_cast<uint8_t>(positiveModulo(static_cast<int>(encoderPosition), 5));
 }
 
 bool isStrictEmoticonPrompt() {
@@ -771,6 +826,7 @@ void saveConfig() {
   preferences.putString("dg_lang", deepgramLanguage);
   preferences.putString("sys_prompt", systemPrompt);
   preferences.putString("supa_url", supabaseUrl);
+  preferences.putString("supa_anon", supabaseAnonKey);
   preferences.putString("device_key", deviceApiKey);
   preferences.putBool("configured", true);
   preferences.end();
@@ -793,6 +849,7 @@ bool loadConfig() {
   deepgramLanguage = preferences.getString("dg_lang", DEFAULT_DEEPGRAM_LANGUAGE);
   systemPrompt = preferences.getString("sys_prompt", DEFAULT_SYSTEM_PROMPT);
   supabaseUrl = preferences.getString("supa_url", "");
+  supabaseAnonKey = preferences.getString("supa_anon", "");
   deviceApiKey = preferences.getString("device_key", "");
   preferences.end();
 
@@ -838,7 +895,9 @@ void printConfigTemplate() {
   Serial.println(
     "{\"wifi_ssid\":\"caroline\",\"wifi_password\":\"caroline#1\","
     "\"deepgram_api_key\":\"YOUR_DEEPGRAM_KEY\",\"deepgram_model\":\"nova-2-general\","
-    "\"deepgram_language\":\"en-US\",\"openai_apiKey\":\"YOUR_OPENAI_KEY\","
+    "\"deepgram_language\":\"en-US\",\"supabase_url\":\"https://PROJECT.supabase.co\","
+    "\"supabase_anon_key\":\"YOUR_SUPABASE_ANON_KEY\","
+    "\"device_api_key\":\"YOUR_DEVICE_API_KEY\",\"openai_apiKey\":\"YOUR_OPENAI_KEY\","
     "\"openai_apiBaseUrl\":\"https://api.openai.com\",\"openai_model\":\"gpt-4.1-nano\","
     "\"system_prompt\":\"You are a concise embedded assistant.\"}");
 }
@@ -864,6 +923,7 @@ bool applyConfigJson(const String& jsonPayload) {
     systemPrompt = doc["system_prompt"].as<String>();
   }
   if (doc.containsKey("supabase_url")) supabaseUrl = doc["supabase_url"].as<String>();
+  if (doc.containsKey("supabase_anon_key")) supabaseAnonKey = doc["supabase_anon_key"].as<String>();
   if (doc.containsKey("device_api_key")) deviceApiKey = doc["device_api_key"].as<String>();
 
   if (!hasWifiConfig()) {
@@ -873,10 +933,10 @@ bool applyConfigJson(const String& jsonPayload) {
 
   saveConfig();
   configReceived = validateConfig();
-  if (hasCloudConfig()) {
+  if (validateConfig()) {
     Serial.println("[Config] Saved");
   } else {
-    Serial.println("[Config] Saved WiFi; waiting for API keys");
+    Serial.println("[Config] Saved partial config; waiting for remaining credentials");
   }
   return true;
 }
@@ -1352,7 +1412,9 @@ void beginRecording() {
   recordStartMs = millis();
   recording = true;
   appState = STATE_RECORDING;
-  updateScreen("LISTENING", "", "", true);
+  if (!ENABLE_NARA_UI_TEST) {
+    updateScreen("LISTENING", "", "", true);
+  }
   buzz(47);
 }
 
@@ -1487,7 +1549,9 @@ bool recordMicrophoneForMs(uint32_t durationMs) {
 }
 
 String deepgramTranscribe() {
-  updateScreen("TRANSCRIBING");
+  if (!ENABLE_NARA_UI_TEST) {
+    updateScreen("TRANSCRIBING");
+  }
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -1717,6 +1781,8 @@ void maddiIngest() {
   }
 
   http.addHeader("Content-Type", "audio/wav");
+  http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
+  http.addHeader("apikey", supabaseAnonKey);
   http.addHeader("X-Device-Key", deviceApiKey);
   http.setTimeout(10000);
 
@@ -1779,7 +1845,9 @@ bool maddiConsult() {
     return false;
   }
 
-  updateScreen("CONSULTING");
+  if (!ENABLE_NARA_UI_TEST) {
+    updateScreen("CONSULTING");
+  }
   WiFiClientSecure client;
   client.setInsecure();  // TODO: add cert pinning for production
   HTTPClient http;
@@ -1791,6 +1859,8 @@ bool maddiConsult() {
   }
 
   http.addHeader("Content-Type", "audio/wav");
+  http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
+  http.addHeader("apikey", supabaseAnonKey);
   http.addHeader("X-Device-Key", deviceApiKey);
   http.setTimeout(30000);  // 30s timeout — pipeline takes 15-20s
 
@@ -1929,9 +1999,21 @@ void initializeNaraButtonState(NaraButtonState& button) {
   button.lastChangeMs = millis();
 }
 
+String normalizeGlyphId(const String& rawId) {
+  String normalized = rawId;
+  normalized.trim();
+  normalized.toLowerCase();
+  if (normalized == "spiral") return "venture";
+  if (normalized == "mirror") return "clarity";
+  if (normalized == "bridge") return "bond";
+  return normalized;
+}
+
 const uint8_t* lookupConsultGlyphBitmap(const char* id) {
+  if (id == nullptr) return nullptr;
+  String normalized = normalizeGlyphId(String(id));
   for (size_t index = 0; index < CONSULT_GLYPH_BITMAP_COUNT; index++) {
-    if (strcmp(id, CONSULT_GLYPH_BITMAPS[index].id) == 0) {
+    if (normalized.equalsIgnoreCase(CONSULT_GLYPH_BITMAPS[index].id)) {
       return CONSULT_GLYPH_BITMAPS[index].bitmap;
     }
   }
@@ -1969,10 +2051,7 @@ void drawCenteredTextLine(const String& text, int16_t centerY) {
 
 uint8_t readNaraUiPotBucket(uint8_t bucketCount) {
   if (bucketCount <= 1) return 0;
-  const int raw = analogRead(NARA_UI_POT_PIN);
-  const int constrained = constrain(raw, 0, 4095);
-  const long mapped = map(constrained, 0, 4095, 0, bucketCount - 1);
-  return static_cast<uint8_t>(constrain(mapped, 0L, static_cast<long>(bucketCount - 1)));
+  return static_cast<uint8_t>(positiveModulo(static_cast<int>(encoderPosition), bucketCount));
 }
 
 bool readStableNaraUiPotBucket(uint8_t bucketCount, uint8_t& stableBucket) {
@@ -2059,18 +2138,29 @@ void renderNaraUiSplash() {
 }
 
 void renderNaraUiListening() {
+  if (naraUiTranscript.length() > 0) {
+    drawWrappedText(naraUiTranscript, 16, 90, 168, 18, 4);
+    return;
+  }
+
   drawCenteredTextLine("LISTENING", 96);
   drawCenteredTextLine("RELEASE TO END", 126);
 }
 
 void renderNaraUiProcessing() {
+  if (naraUiTranscript.length() > 0) {
+    drawWrappedText(naraUiTranscript, 16, 82, 168, 18, 4);
+    drawCenteredTextLine(naraUiProcessingStatus, 164);
+    return;
+  }
+
   drawCenteredTextLine("PROCESSING", 96);
-  drawCenteredTextLine("GLYPHS IN FLIGHT", 126);
+  drawCenteredTextLine(naraUiProcessingStatus, 126);
 }
 
 void renderNaraUiOutput() {
   display.setFont(&FreeMonoBold12pt7b);
-  drawCenteredTextLine(naraCurrentOutput.word, 36);
+  drawCenteredTextLine(naraCurrentWord, 36);
   display.setFont(&FreeMonoBold9pt7b);
 
   const int16_t glyphX[3] = {16, 122, 67};
@@ -2079,12 +2169,17 @@ void renderNaraUiOutput() {
   const int16_t glyphH[3] = {60, 60, 64};
 
   for (uint8_t index = 0; index < 3; index++) {
-    const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentOutput.glyphs[index]);
+    const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[index].c_str());
     if (naraUiOutputFocusIndex == index && !naraUiOutputMenuArmed) {
       display.drawRect(glyphX[index] - 4, glyphY[index] - 4, glyphW[index] + 8, glyphH[index] + 8, GxEPD_BLACK);
     }
     if (bitmap != nullptr) {
       drawScaledConsultGlyph(glyphX[index], glyphY[index], bitmap, glyphW[index], glyphH[index]);
+    } else {
+      const uint8_t* fallbackBitmap = lookupConsultGlyphBitmap(NARA_SAFE_GALLERY_GLYPHS[index]);
+      if (fallbackBitmap != nullptr) {
+        drawScaledConsultGlyph(glyphX[index], glyphY[index], fallbackBitmap, glyphW[index], glyphH[index]);
+      }
     }
   }
 }
@@ -2141,10 +2236,93 @@ void renderNaraUiSettings() {
 }
 
 void renderNaraUiDetail() {
-  const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentOutput.glyphs[naraUiDetailGlyphIndex]);
+  const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[naraUiDetailGlyphIndex].c_str());
   if (bitmap != nullptr) {
     drawScaledConsultGlyph(52, 56, bitmap, 96, 96);
   }
+}
+
+void setNaraCurrentOutputFromSample(const NaraSampleOutput& sample) {
+  naraCurrentOutput = sample;
+  naraCurrentWord = sample.word;
+  for (uint8_t index = 0; index < 3; index++) {
+    naraCurrentGlyphs[index] = sample.glyphs[index];
+  }
+}
+
+void setNaraCurrentOutputFromConsult() {
+  naraCurrentWord = consultWord;
+  for (uint8_t index = 0; index < 3; index++) {
+    naraCurrentGlyphs[index] = normalizeGlyphId(consultGlyphIds[index]);
+    Serial.printf("[Nara] Output glyph %u = %s\n", index, naraCurrentGlyphs[index].c_str());
+  }
+}
+
+void failNaraUiCapture(const String& transcript, const String& status) {
+  naraUiTranscript = transcript;
+  naraUiProcessingStatus = status;
+  naraUiNeedsRender = true;
+  renderNaraUiScreen();
+  delay(1500);
+  naraUiTranscript = "";
+  naraUiProcessingStatus = "GLYPHS IN FLIGHT";
+  setNaraUiState(NARA_UI_0_IDLE);
+}
+
+void processNaraUiCapture() {
+  if (recordedBytes == 0) {
+    failNaraUiCapture("No audio captured.", "TRY AGAIN");
+    return;
+  }
+
+  if (!wifiConnected) {
+    failNaraUiCapture("WiFi is not connected.", "WIFI FAIL");
+    return;
+  }
+
+  if (!hasDeepgramConfig()) {
+    failNaraUiCapture("Deepgram is not configured.", "CONFIG");
+    return;
+  }
+
+  appState = STATE_TRANSCRIBING;
+  naraUiProcessingStatus = "TRANSCRIBING";
+  naraUiNeedsRender = true;
+  renderNaraUiScreen();
+
+  const String transcript = deepgramTranscribe();
+  if (transcript.isEmpty()) {
+    appState = STATE_IDLE;
+    failNaraUiCapture("No speech recognized.", "TRY AGAIN");
+    return;
+  }
+
+  naraUiTranscript = transcript;
+  naraUiProcessingStatus = "CONSULTING";
+  naraUiNeedsRender = true;
+  renderNaraUiScreen();
+
+  if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() && !deviceApiKey.isEmpty()) {
+    appState = STATE_THINKING;
+    if (!maddiConsult()) {
+      appState = STATE_IDLE;
+      failNaraUiCapture(transcript, "CONSULT FAIL");
+      return;
+    }
+    setNaraCurrentOutputFromConsult();
+  } else {
+    const NaraSampleOutput& sample =
+      NARA_SAMPLE_OUTPUTS[naraUiSampleCursor % (sizeof(NARA_SAMPLE_OUTPUTS) / sizeof(NARA_SAMPLE_OUTPUTS[0]))];
+    naraUiSampleCursor++;
+    rotateNaraHistory(sample);
+    setNaraCurrentOutputFromSample(sample);
+  }
+
+  naraUiOutputFocusIndex = 0;
+  naraUiOutputMenuArmed = false;
+  naraUiProcessingStatus = "GLYPHS IN FLIGHT";
+  appState = STATE_IDLE;
+  setNaraUiState(NARA_UI_4_OUTPUT);
 }
 
 void renderNaraUiLexicon() {
@@ -2186,6 +2364,7 @@ void setNaraUiState(NaraUiState nextState) {
   naraUiStateStartedMs = millis();
   naraUiLastPotBucket = -1;
   naraUiLastPotBucketChangeMs = millis();
+  naraUiLastEncoderPosition = encoderPosition;
   naraUiNeedsRender = true;
 }
 
@@ -2212,9 +2391,7 @@ void renderNaraUiScreen() {
           drawNaraUiFooter(naraUiIdlePotBucket == 1 ? "MENU" : "RECORD", "SELECT");
           break;
         case NARA_UI_1_SPLASH:
-          drawNaraUiHeader("NARA", "UI_1");
           renderNaraUiSplash();
-          drawNaraUiFooter("BOOT", "AUTO");
           break;
         case NARA_UI_2_LISTENING:
           drawNaraUiHeader("LISTENING", "UI_2");
@@ -2356,7 +2533,7 @@ void handleNaraUiSelectPress() {
       else setNaraUiState(NARA_UI_3C_SETTINGS);
       break;
     case NARA_UI_3B_HISTORY:
-      naraCurrentOutput = naraHistory[naraUiHistoryIndex];
+      setNaraCurrentOutputFromSample(naraHistory[naraUiHistoryIndex]);
       naraUiOutputFocusIndex = 0;
       naraUiOutputMenuArmed = false;
       setNaraUiState(NARA_UI_4_OUTPUT);
@@ -2398,7 +2575,7 @@ void startNaraUiTest() {
   initializeNaraButtonState(naraRecordButton);
   initializeNaraButtonState(naraSelectButton);
   initializeNaraButtonState(naraBackButton);
-  naraCurrentOutput = NARA_SAMPLE_OUTPUTS[0];
+  setNaraCurrentOutputFromSample(NARA_SAMPLE_OUTPUTS[0]);
   naraUiOutputFocusIndex = 0;
   naraUiOutputMenuArmed = false;
   naraUiMenuIndex = 0;
@@ -2410,13 +2587,17 @@ void startNaraUiTest() {
   naraUiNeedsRender = true;
   naraUiNeedsFullRefresh = true;
   naraUiRecordArmed = false;
+  naraUiTranscript = "";
+  naraUiProcessingStatus = "GLYPHS IN FLIGHT";
   naraUiLastPotBucket = -1;
   naraUiLastPotBucketChangeMs = millis();
+  naraUiLastEncoderPosition = encoderPosition;
   setNaraUiState(NARA_UI_1_SPLASH);
   renderNaraUiScreen();
 }
 
 void processNaraUiTest() {
+  updateRotaryEncoder();
   const bool recordChanged = updateNaraButtonState(naraRecordButton);
   const bool selectChanged = updateNaraButtonState(naraSelectButton);
   const bool backChanged = updateNaraButtonState(naraBackButton);
@@ -2427,26 +2608,30 @@ void processNaraUiTest() {
     setNaraUiState(NARA_UI_0_IDLE);
   }
 
-  if (naraUiState == NARA_UI_3_PROCESSING && millis() - naraUiStateStartedMs >= NARA_UI_PROCESS_MS) {
-    naraCurrentOutput = NARA_SAMPLE_OUTPUTS[naraUiSampleCursor % (sizeof(NARA_SAMPLE_OUTPUTS) / sizeof(NARA_SAMPLE_OUTPUTS[0]))];
-    naraUiSampleCursor++;
-    rotateNaraHistory(naraCurrentOutput);
-    naraUiOutputFocusIndex = 0;
-    naraUiOutputMenuArmed = false;
-    setNaraUiState(NARA_UI_4_OUTPUT);
-  }
-
   if (naraUiState == NARA_UI_0_IDLE && !naraRecordButton.stablePressed) {
     naraUiRecordArmed = true;
   }
 
   if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_0_IDLE && naraUiRecordArmed) {
     naraUiRecordArmed = false;
+    naraUiTranscript = "";
+    naraUiProcessingStatus = "GLYPHS IN FLIGHT";
+    beginRecording();
+    if (appState == STATE_ERROR) {
+      setNaraUiState(NARA_UI_0_IDLE);
+      return;
+    }
     setNaraUiState(NARA_UI_2_LISTENING);
   }
 
+  if (naraUiState == NARA_UI_2_LISTENING && recording) {
+    captureAudioLoop();
+  }
+
   if (recordChanged && !naraRecordButton.stablePressed && naraUiState == NARA_UI_2_LISTENING) {
+    finalizeHoldToSpeakRecording();
     setNaraUiState(NARA_UI_3_PROCESSING);
+    processNaraUiCapture();
   }
 
   if (selectChanged && naraSelectButton.stablePressed) {
@@ -2454,39 +2639,59 @@ void processNaraUiTest() {
   }
 
   if (backChanged && naraBackButton.stablePressed) {
+    if (naraUiState == NARA_UI_2_LISTENING && recording) {
+      recording = false;
+      stopMicrophone();
+      recordedBytes = 0;
+      appState = STATE_IDLE;
+    }
     handleNaraUiBackPress();
   }
 
-  uint8_t stableBucket = 0;
-  uint8_t bucketCount = 0;
-  switch (naraUiState) {
-    case NARA_UI_0_IDLE:
-      bucketCount = 2;
-      break;
-    case NARA_UI_4_OUTPUT:
-      bucketCount = 4;
-      break;
-    case NARA_UI_MENU:
-      bucketCount = 3;
-      break;
-    case NARA_UI_3A_LEXICON:
-      bucketCount = static_cast<uint8_t>(sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]));
-      break;
-    case NARA_UI_3B_HISTORY:
-      bucketCount = 3;
-      break;
-    case NARA_UI_3C_SETTINGS:
-      bucketCount = 4;
-      break;
-    case NARA_UI_5A_DETAIL:
-      bucketCount = 3;
-      break;
-    default:
-      break;
-  }
+  const int32_t encoderDelta = encoderPosition - naraUiLastEncoderPosition;
+  if (encoderDelta != 0) {
+    naraUiLastEncoderPosition = encoderPosition;
+    const int step = (encoderDelta > 0) ? 1 : -1;
+    const int iterations = abs(static_cast<int>(encoderDelta));
 
-  if (bucketCount > 0 && readStableNaraUiPotBucket(bucketCount, stableBucket)) {
-    applyNaraUiPotSelection(stableBucket);
+    for (int index = 0; index < iterations; index++) {
+      switch (naraUiState) {
+        case NARA_UI_0_IDLE:
+          naraUiIdlePotBucket = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiIdlePotBucket) + step, 2));
+          break;
+        case NARA_UI_4_OUTPUT: {
+          const int currentBucket = naraUiOutputMenuArmed ? 3 : static_cast<int>(naraUiOutputFocusIndex);
+          const int nextBucket = positiveModulo(currentBucket + step, 4);
+          if (nextBucket == 3) {
+            naraUiOutputMenuArmed = true;
+          } else {
+            naraUiOutputMenuArmed = false;
+            naraUiOutputFocusIndex = static_cast<uint8_t>(nextBucket);
+          }
+          break;
+        }
+        case NARA_UI_MENU:
+          naraUiMenuIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiMenuIndex) + step, 3));
+          break;
+        case NARA_UI_3A_LEXICON: {
+          const int count = static_cast<int>(sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]));
+          naraUiLexiconIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiLexiconIndex) + step, count));
+          break;
+        }
+        case NARA_UI_3B_HISTORY:
+          naraUiHistoryIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiHistoryIndex) + step, 3));
+          break;
+        case NARA_UI_3C_SETTINGS:
+          naraUiSettingsIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiSettingsIndex) + step, 4));
+          break;
+        case NARA_UI_5A_DETAIL:
+          naraUiDetailGlyphIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiDetailGlyphIndex) + step, 3));
+          break;
+        default:
+          break;
+      }
+    }
+    naraUiNeedsRender = true;
   }
 
   if ((recordChanged || selectChanged || backChanged) && naraUiState != NARA_UI_1_SPLASH) {
@@ -2836,7 +3041,7 @@ void setWaitingConfigState() {
   appState = STATE_WAITING_CONFIG;
 
   if (!hasCloudConfig()) {
-    captionUser = wifiConnected ? "WiFi ready. Send API keys." : "WiFi not connected yet.";
+    captionUser = wifiConnected ? "WiFi ready. Send cloud config." : "WiFi not connected yet.";
     captionAssistant = "Use SENSORS over serial to test hardware.";
     updateScreen(wifiConnected ? "WAIT API" : "CONFIG", captionUser, captionAssistant, true);
     printConfigTemplate();
@@ -3027,16 +3232,21 @@ bool classifyAudioOnDevice() {
 
 void initializeSystem() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(POT_PIN, INPUT);
-  pinMode(GALLERY_POT_PIN, INPUT);
+  pinMode(POT_PIN, INPUT_PULLUP);
+  pinMode(GALLERY_POT_PIN, INPUT_PULLUP);
   pinMode(SELECT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(BACK_BUTTON_PIN, INPUT_PULLUP);
+  encoderLastClkState = digitalRead(ENCODER_CLK_PIN);
+  encoderLastEdgeMs = millis();
   ensureAudioBuffer();
   printHardwareSummary();
   WiFi.onEvent(onWiFiEvent);
   initDisplay();
 
   if (ENABLE_NARA_UI_TEST) {
+    naraUiNeedsFullRefresh = true;
+    setNaraUiState(NARA_UI_1_SPLASH);
+    renderNaraUiScreen();
     initI2CDevices();
     buttonLastRawPressed = readButtonPressedRaw();
     buttonStablePressed = buttonLastRawPressed;
@@ -3045,6 +3255,12 @@ void initializeSystem() {
     runHardwareSelfTest();
     lastSensorMonitorMs = millis();
     initYamnet();
+    if (loadConfig()) {
+      configReceived = validateConfig();
+    }
+    if (hasWifiConfig()) {
+      connectWifi();
+    }
     startNaraUiTest();
     return;
   }
@@ -3194,9 +3410,11 @@ void processSerialCommands() {
       Serial.print(" SSID=");
       Serial.println(wifiSsid);
       Serial.print("[Status] Cloud=");
-      Serial.println(hasCloudConfig() ? "ready" : "missing API keys");
+      Serial.println(hasCloudConfig() ? "ready" : "missing config");
       Serial.print("[Status] Deepgram=");
       Serial.println(hasDeepgramConfig() ? "ready" : "missing");
+      Serial.print("[Status] Supabase=");
+      Serial.println(hasSupabaseConfig() ? "ready" : "missing");
       Serial.print("[Status] OpenAI=");
       Serial.println(openaiApiKey.isEmpty() ? "missing" : "ready");
       Serial.println("[Status] Focus=button+mic");
@@ -3353,6 +3571,7 @@ void setup() {
 
 void loop() {
   processSerialCommands();
+  updateRotaryEncoder();
 
   if (ENABLE_NARA_UI_TEST) {
     processNaraUiTest();

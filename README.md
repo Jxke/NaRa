@@ -1,14 +1,14 @@
 # ROCK
 
-This branch now targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running a push-to-talk assistant:
+This repo targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running the Nara handheld consultation flow:
 
-- INMP441 microphone -> Deepgram STT
-- OpenAI text reply
-- Waveshare 1.54" e-paper captions/status plus a post-reply glyph gallery
-- DRV2605L and MPU6050 on shared I2C
+- INMP441 microphone capture
+- Deepgram STT
+- Supabase Edge Functions for glyph consultation and ambient context ingest
+- Waveshare 1.54" e-paper Nara UI
+- DRV2605L haptics and MPU6050 on shared I2C
 
 The old UNO Q / Debian-side flow is obsolete here.
-The temporary `DAZI-AI` import used during early integration has been removed; the active firmware is self-contained in this repo.
 
 ## Target Board
 
@@ -38,8 +38,13 @@ The temporary `DAZI-AI` import used during early integration has been removed; t
   - `GPIO2`
   - configured as `INPUT_PULLUP`
   - idle = `HIGH`, pressed = `LOW`
-- Potentiometer
-  - `GPIO3`
+- Rotary encoder
+  - `CLK -> GPIO8`
+  - `DT -> GPIO3`
+- Select button
+  - `GPIO1`
+- Back button
+  - `GPIO7`
 
 If any wiring changes, update the pin constants at the top of `ROCK/ROCK.ino`.
 
@@ -84,7 +89,9 @@ Secrets are provisioned over serial and stored in `Preferences`.
 `Preferences` is the ESP32 persistent key-value store used for:
 
 - Wi-Fi SSID/password
-- Deepgram/OpenAI keys
+- Deepgram key
+- Supabase URL / anon key / device API key
+- optional OpenAI key for legacy test paths
 - model settings
 - `systemPrompt`
 
@@ -96,33 +103,34 @@ The sketch now boots with these Wi-Fi defaults unless you override them over ser
 Manual JSON format:
 
 ```json
-{"wifi_ssid":"caroline","wifi_password":"caroline#1","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
+{"wifi_ssid":"caroline","wifi_password":"caroline#1","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","supabase_url":"https://tsblsjjlrjnllsqyusmb.supabase.co","supabase_anon_key":"YOUR_SUPABASE_ANON_KEY","device_api_key":"YOUR_DEVICE_API_KEY","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
 ```
 
 Helper script:
 
 ```powershell
-./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -OpenAIApiKey "YOUR_OPENAI_KEY"
+./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -SupabaseUrl "https://tsblsjjlrjnllsqyusmb.supabase.co" -SupabaseAnonKey "YOUR_SUPABASE_ANON_KEY" -DeviceApiKey "YOUR_DEVICE_API_KEY"
 ```
 
-Use the push button on `GPIO2` for press-and-hold recording. The potentiometer on `GPIO3` scrolls the post-reply gallery.
+For the current Nara pipeline, the minimum cloud config is `Deepgram + Supabase URL + Supabase anon key + device API key`.
+`OpenAI` remains optional and is only needed for the legacy direct reply path.
+
+Use the push button on `GPIO2` for press-and-hold recording. The encoder on `GPIO8` / `GPIO3` moves through Nara UI selections and output focus.
 
 Current interaction model:
 
-- hold `GPIO2` button to record
-- release the button to stop recording
-- firmware then runs `Deepgram -> OpenAI`
-- the e-paper first displays the transcript in `USER` and the reply in `AI`
-- after a successful reply, the screen enters a potentiometer-driven gallery on `GPIO3`:
-  - position 1: centered `TREE` at `128x128`
-  - position 2: centered `BUTTERFLY` at `128x128`
-  - position 3: centered `FLOWER` at `128x128`
-  - position 4: 3-glyph `64x64` collage with centered `SELF-MASTERY`
-  - position 5: returns to the normal `READY` screen so the next button press can record again
+- boot to a logo-only Nara splash
+- enter the Nara idle screen
+- hold `GPIO2` to record
+- release `GPIO2` to stop recording
+- firmware runs `Deepgram -> Supabase /consult`
+- the e-paper shows Nara listening and processing screens
+- the output screen shows 3 bitmap glyphs plus a companion word returned by the live consult pipeline
+- ambient context capture also posts audio to `/ingest-audio` when enabled
 
 ## Serial Test Mode
 
-The firmware includes a serial-injected transcript path so the OpenAI/display pipeline can be tested without the microphone.
+The firmware still includes a serial-injected transcript path for the legacy OpenAI/display flow, but the main live path is the Nara consult pipeline.
 
 Open a terminal on the active board port at `115200`:
 
@@ -167,7 +175,6 @@ TEST:Say hello from the OpenAI test path
 ```
 
 This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
-It also enters the same post-reply glyph gallery sequence that potentiometer-controlled recordings use.
 
 Notes:
 
@@ -175,9 +182,9 @@ Notes:
 - `PROMPT DEFAULT` resets the stored prompt back to the firmware default.
 - `BUZZ` triggers the DRV2605L haptic effect test.
 - `SCAN` scans the I2C bus and reports idle line state.
-- `SENSORS` and `MONITOR ON` are for button, potentiometer, and MPU6050 checks.
+- `SENSORS` and `MONITOR ON` are for button, encoder, and MPU6050 checks.
 - the microphone should stay idle except during hold-to-speak or explicit caption commands
-- the current firmware forces an ASCII-emoticon-style OpenAI reply mode
+- the current firmware keeps the older ASCII-emoticon OpenAI prompt path only for legacy test mode
 
 ## Arduino CLI Dependencies
 
@@ -194,21 +201,25 @@ Installed during integration:
 
 ## Current Status
 
-- Main ESP32-S3 sketch uses `INMP441 -> Deepgram STT -> OpenAI reply`
-- E-paper uses the older fixed layout for live interaction:
-  - `ROCK` header
-  - `WiFi:` / `POT:` row
-  - `USER`
-  - `AI`
-- After a successful reply, the potentiometer on `GPIO3` cycles a glyph gallery:
-  - `TREE` `128x128`
-  - `BUTTERFLY` `128x128`
-  - `FLOWER` `128x128`
-  - `TREE + BUTTERFLY + FLOWER` at `64x64` with centered `SELF-MASTERY`
+- Main ESP32-S3 sketch uses the Nara UI flow with:
+  - logo-only splash
+  - idle
+  - listening
+  - processing
+  - bitmap glyph output
+- Live consult requests send:
+  - `Authorization: Bearer <SUPABASE_ANON_KEY>`
+  - `apikey: <SUPABASE_ANON_KEY>`
+  - `X-Device-Key: <device key>`
+- Live Supabase project `tsblsjjlrjnllsqyusmb` now has:
+  - current glyph migrations applied
+  - current `seed.sql` glyph inventory applied
+  - updated `consult` function deployed
+- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 42-glyph inventory
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
 - Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs
-- Serial `TEST:` mode added for non-mic pipeline checks
+- Serial `TEST:` mode retained for non-mic legacy OpenAI checks
 - Boot-time and live serial hardware diagnostics added
 - `DRV2605L` is detected over I2C, but physical motor vibration still needs hardware validation with `BUZZ`
 - `MPU6050` has been verified working over serial
