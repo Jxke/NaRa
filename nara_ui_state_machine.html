@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nara UI State Machine</title>
+    <style>
+      @font-face {
+        font-family: "PP Mondwest";
+        src: url("public/fonts/pp/PPMondwest-Regular.otf") format("opentype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "PP NeueBit";
+        src: url("public/fonts/pp/PPNeueBit-Bold.otf") format("opentype");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        --bg: #ffffff;
+        --ink: #000000;
+        --ink-2: rgba(0, 0, 0, 0.78);
+        --ink-3: rgba(0, 0, 0, 0.54);
+        --ink-subtle: rgba(0, 0, 0, 0.07);
+        --ink-faint: rgba(0, 0, 0, 0.035);
+        --rule: rgba(0, 0, 0, 0.18);
+        --device-width: 240px;
+        --device-height: 240px;
+        --screen-scale: 2.6;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          linear-gradient(var(--ink-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--ink-faint) 1px, transparent 1px),
+          var(--bg);
+        background-size: 24px 24px;
+        color: var(--ink);
+      }
+
+      body {
+        font-family: "PP Mondwest", ui-serif, serif;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(320px, 420px) minmax(280px, 1fr);
+        gap: 24px;
+        padding: 24px;
+      }
+
+      .panel,
+      .device-panel {
+        border: 1px solid var(--ink);
+        background: var(--bg);
+      }
+
+      .panel {
+        display: grid;
+        align-content: start;
+      }
+
+      .panel-head,
+      .device-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      .mark {
+        width: 86px;
+        height: 38px;
+        background: no-repeat center / contain url("public/nara/logomark.svg");
+      }
+
+      .eyebrow,
+      .chip,
+      .control-label,
+      .screen-meta,
+      .footer-meta,
+      .list-kicker,
+      .toggle-state,
+      .nav-key {
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .eyebrow {
+        font-size: 15px;
+      }
+
+      .panel-body {
+        display: grid;
+        gap: 18px;
+        padding: 16px;
+      }
+
+      .intro h1 {
+        margin: 0 0 6px;
+        font-size: clamp(28px, 3vw, 44px);
+        line-height: 0.94;
+        font-weight: 400;
+      }
+
+      .intro p {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.25;
+        max-width: 28ch;
+      }
+
+      .section {
+        display: grid;
+        gap: 10px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--ink);
+      }
+
+      .section-title {
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-size: 18px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      button,
+      .toggle-row {
+        border: 1px solid var(--ink);
+        background: var(--bg);
+        color: var(--ink);
+        border-radius: 0;
+      }
+
+      button {
+        cursor: pointer;
+        font: inherit;
+        padding: 12px 10px;
+      }
+
+      button:hover {
+        background: var(--ink-subtle);
+      }
+
+      .control-button {
+        display: grid;
+        gap: 4px;
+        align-content: start;
+        min-height: 84px;
+        text-align: left;
+      }
+
+      .control-label {
+        font-size: 14px;
+      }
+
+      .control-copy {
+        font-size: 15px;
+        line-height: 1.05;
+      }
+
+      .dial-wrap {
+        display: grid;
+        gap: 10px;
+      }
+
+      .dial-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dial-row input[type="range"] {
+        width: 100%;
+        accent-color: #000000;
+      }
+
+      .dial-readout {
+        min-width: 44px;
+        text-align: center;
+        padding: 8px 10px;
+        border: 1px solid var(--ink);
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-size: 18px;
+      }
+
+      .keys {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        padding: 7px 10px;
+        border: 1px solid var(--ink);
+        font-size: 14px;
+      }
+
+      .device-panel {
+        display: grid;
+        align-content: start;
+        gap: 18px;
+        padding: 16px;
+      }
+
+      .device-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .device-meta h2 {
+        margin: 0;
+        font-weight: 400;
+        font-size: 34px;
+        line-height: 0.95;
+      }
+
+      .device-meta p {
+        margin: 4px 0 0;
+        font-size: 16px;
+        line-height: 1.1;
+      }
+
+      .screen-shell {
+        width: calc(var(--device-width) * var(--screen-scale));
+        height: calc(var(--device-height) * var(--screen-scale));
+        border: 2px solid var(--ink);
+        background: var(--bg);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .screen-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(var(--ink-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--ink-faint) 1px, transparent 1px);
+        background-size: calc(4px * var(--screen-scale)) calc(4px * var(--screen-scale));
+        pointer-events: none;
+      }
+
+      .screen {
+        position: absolute;
+        inset: 0;
+        width: var(--device-width);
+        height: var(--device-height);
+        transform: scale(var(--screen-scale));
+        transform-origin: top left;
+        padding: 10px;
+      }
+
+      .screen-screen {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 8px;
+      }
+
+      .screen-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 6px;
+      }
+
+      .screen-title {
+        font-size: 30px;
+        line-height: 0.9;
+        margin: 0;
+        font-weight: 400;
+      }
+
+      .screen-meta {
+        font-size: 10px;
+        text-align: right;
+      }
+
+      .screen-body {
+        min-height: 0;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+      }
+
+      .screen-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border-top: 1px solid var(--rule);
+        padding-top: 6px;
+      }
+
+      .footer-meta {
+        font-size: 10px;
+      }
+
+      .plus-screen {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        padding-bottom: 12px;
+      }
+
+      .plus-mark {
+        font-family: "PP Mondwest", ui-serif, serif;
+        font-size: 102px;
+        line-height: 0.8;
+      }
+
+      .center-stack {
+        height: 100%;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 10px;
+        text-align: center;
+      }
+
+      .center-copy {
+        font-size: 18px;
+        line-height: 1.05;
+        max-width: 16ch;
+      }
+
+      .record-ring,
+      .status-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid var(--ink);
+      }
+
+      .record-ring.is-live {
+        background: var(--ink);
+        animation: pulse 0.9s steps(2, end) infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
+
+      .thinking {
+        display: flex;
+        align-items: center;
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 15px;
+      }
+
+      .output-grid {
+        display: grid;
+        grid-template-areas:
+          "word word"
+          "g1 g2"
+          "g3 g3";
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 50px 50px;
+        gap: 8px 12px;
+        align-content: start;
+      }
+
+      .output-word {
+        grid-area: word;
+        text-align: center;
+        font-size: 24px;
+        line-height: 0.92;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .glyph-card {
+        padding: 4px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        min-height: 56px;
+      }
+
+      .glyph-card.is-active {
+        border: 2px solid var(--ink);
+        border-width: 2px;
+      }
+
+      .glyph-card img {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: grayscale(1) contrast(1.25);
+      }
+
+      .glyph-a { grid-area: g1; }
+      .glyph-b { grid-area: g2; }
+      .glyph-c {
+        grid-area: g3;
+        justify-self: center;
+        width: 104px;
+        min-width: 104px;
+      }
+
+      .list {
+        display: grid;
+        gap: 6px;
+      }
+
+      .list-row {
+        display: grid;
+        gap: 2px;
+        padding: 5px 8px;
+        border: 1px solid var(--ink);
+      }
+
+      .list-row.is-active {
+        border-width: 2px;
+      }
+
+      .list-row.is-dashed {
+        border-style: dashed;
+      }
+
+      .list-label {
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .list-copy {
+        font-size: 13px;
+        line-height: 1.05;
+      }
+
+      .toggle-row {
+        min-height: 32px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+      }
+
+      .history-row {
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 8px 10px;
+      }
+
+      .history-word {
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-size: 16px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+      }
+
+      .history-glyphs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .history-glyphs img {
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: grayscale(1) contrast(1.25);
+      }
+
+      .detail-stack {
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+
+      .detail-image {
+        width: 124px;
+        height: 124px;
+        display: grid;
+        place-items: center;
+        border: 2px solid var(--ink);
+      }
+
+      .detail-image img {
+        width: 108px;
+        height: 108px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: grayscale(1) contrast(1.25);
+      }
+
+      .lexicon-ring {
+        position: relative;
+        width: 100%;
+        height: 166px;
+        overflow: hidden;
+      }
+
+      .lexicon-glyph {
+        position: absolute;
+        display: grid;
+        place-items: center;
+        transform: translate(-50%, -50%);
+        transition:
+          left 180ms steps(8, end),
+          top 180ms steps(8, end),
+          width 180ms steps(8, end),
+          height 180ms steps(8, end),
+          opacity 180ms steps(8, end),
+          border-width 180ms steps(8, end);
+        border: 1px solid var(--ink);
+        background: var(--bg);
+      }
+
+      .lexicon-glyph.is-center {
+        border-width: 2px;
+      }
+
+      .lexicon-glyph img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: grayscale(1) contrast(1.25);
+      }
+
+      .status-rail {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .status-token {
+        border: 1px solid var(--ink);
+        padding: 3px 6px;
+        font-family: "PP NeueBit", ui-monospace, monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 1100px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .device-panel {
+          justify-items: center;
+        }
+      }
+
+      @media (max-width: 760px) {
+        :root {
+          --screen-scale: 1.5;
+        }
+
+        .app {
+          padding: 12px;
+          gap: 12px;
+        }
+
+        .controls-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel">
+        <header class="panel-head">
+          <div class="mark" aria-hidden="true"></div>
+          <div class="eyebrow">Embedded UI State Machine</div>
+        </header>
+        <div class="panel-body">
+          <section class="intro">
+            <h1>Nara device flow prototype</h1>
+            <p>HTML-first state machine preview for idle, recording, processing, output, menu, history, settings, and detail states.</p>
+          </section>
+
+          <section class="section">
+            <div class="section-title">Hardware Inputs</div>
+            <div class="controls-grid">
+              <button id="recordButton" class="control-button" type="button">
+                <span class="control-label">Record Button</span>
+                <span class="control-copy">Hold to record</span>
+              </button>
+              <button id="selectButton" class="control-button" type="button">
+                <span class="control-label">Select Button</span>
+                <span class="control-copy">Confirm / enter</span>
+              </button>
+              <button id="backButton" class="control-button" type="button">
+                <span class="control-label">Back Button</span>
+                <span class="control-copy">Back / cancel</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">Potentiometer</div>
+            <div class="dial-wrap">
+              <div class="dial-row">
+                <button id="potLeftButton" type="button" aria-label="Rotate left">◀</button>
+                <input id="potentiometer" type="range" min="0" max="41" step="1" value="0" />
+                <button id="potRightButton" type="button" aria-label="Rotate right">▶</button>
+              </div>
+              <div class="dial-row">
+                <div class="control-label">Position</div>
+                <div class="dial-readout" id="potValue">0</div>
+                <div class="control-label">0-41</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">Keyboard Mapping</div>
+            <div class="keys">
+              <div class="chip"><span class="nav-key">R</span> hold record</div>
+              <div class="chip"><span class="nav-key">Enter</span> select</div>
+              <div class="chip"><span class="nav-key">Backspace</span> back</div>
+              <div class="chip"><span class="nav-key">← / →</span> rotate</div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">Transition Notes</div>
+            <div id="transitionLog" class="list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="device-panel">
+        <header class="device-head">
+          <div class="device-meta">
+            <div>
+              <h2>Nara</h2>
+              <p>single active screen, button + dial navigation</p>
+            </div>
+          </div>
+          <div class="status-rail" id="statusRail"></div>
+        </header>
+
+        <div class="screen-shell">
+          <div class="screen">
+            <div id="screenRoot" class="screen-screen"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const UIState = Object.freeze({
+        UI_0: "UI_0",
+        UI_1: "UI_1",
+        UI_2: "UI_2",
+        UI_3: "UI_3",
+        UI_4: "UI_4",
+        UI_MENU: "UI_MENU",
+        UI_3a: "UI_3a",
+        UI_3b: "UI_3b",
+        UI_3c: "UI_3c",
+        UI_5a: "UI_5a",
+      });
+
+      const menuOptions = ["Lexicon", "History", "Settings"];
+      const settingsOptions = [
+        { key: "context", label: "Context" },
+        { key: "recording", label: "Recording" },
+        { key: "lowData", label: "Low Data" },
+        { key: "batterySaver", label: "Battery Saver" },
+      ];
+
+      const lexiconGlyphIds = [
+        "venture", "manifestation", "intuition", "abundance", "structure", "conformity",
+        "divergence", "determination", "courage", "introspect", "cascade", "balance",
+        "surrender", "transformation", "harmony", "restriction", "sudden", "healing",
+        "illusion", "clarity", "awakening", "complete", "industry", "transition",
+        "release", "duality", "conflict", "clouded", "pour", "threshold",
+        "fire", "pattern", "house", "bond", "detachment", "unity",
+        "cycles", "interconnection", "opening", "ripple", "dialogue", "progression",
+      ];
+
+      const glyphLibrary = {
+        venture: {
+          title: "Venture",
+          tags: ["beginnings", "leap of faith", "becoming", "unfolding"],
+          interpretation: "Something is beginning to take shape, even if it is not visible yet.",
+          prompts: [
+            "What is beginning to take shape?",
+            "What beginning needs care?",
+          ],
+        },
+        threshold: {
+          title: "Threshold",
+          tags: ["entry", "unknown", "transition", "possibility"],
+          interpretation: "A boundary is being crossed from the known into something not yet visible.",
+          prompts: [
+            "How do you relate to what lies beyond this threshold?",
+            "Where does something new begin?",
+          ],
+        },
+        opening: {
+          title: "Opening",
+          tags: ["possibility", "access", "invitation", "perspective"],
+          interpretation: "A partial opening creates exchange between what was closed and what is now available.",
+          prompts: [
+            "What becomes available through this opening?",
+            "Where is access being created?",
+          ],
+        },
+        balance: {
+          title: "Balance",
+          tags: ["equilibrium", "stability", "alignment", "steadiness"],
+          interpretation: "Multiple elements are being held in relation through careful adjustment.",
+          prompts: [
+            "What is being held in equilibrium?",
+            "Where are adjustments maintaining stability?",
+          ],
+        },
+        clarity: {
+          title: "Clarity",
+          tags: ["illumination", "understanding", "awareness", "renewal"],
+          interpretation: "Something becomes visible that was previously unclear.",
+          prompts: [
+            "What is becoming clearer to you now?",
+            "Where is something coming into focus?",
+          ],
+        },
+        progression: {
+          title: "Progression",
+          tags: ["steps", "growth", "sequence", "advancement"],
+          interpretation: "Movement occurs in defined steps rather than all at once.",
+          prompts: [
+            "What step comes next from here?",
+            "Where is movement happening in stages?",
+          ],
+        },
+        ripple: {
+          title: "Ripple",
+          tags: ["impact", "spread", "influence", "propagation"],
+          interpretation: "A single action creates outward movement beyond its origin.",
+          prompts: [
+            "How far does this extend from its origin?",
+            "Where are effects spreading outward?",
+          ],
+        },
+        harmony: {
+          title: "Harmony",
+          tags: ["flow", "timing", "alignment", "ease"],
+          interpretation: "Elements are unfolding in a way that feels natural rather than forced.",
+          prompts: [
+            "What seems to be aligning without force?",
+            "Where is balance occurring through flow?",
+          ],
+        },
+        conflict: {
+          title: "Conflict",
+          tags: ["tension", "choice", "opposition", "uncertainty"],
+          interpretation: "Multiple directions are present without clear alignment.",
+          prompts: [
+            "Where is tension between options present?",
+            "What is pulling in different directions?",
+          ],
+        },
+      };
+
+      const sampleOutputs = [
+        { glyphs: ["venture", "threshold", "opening"], word: "becoming", detailIndex: 0 },
+        { glyphs: ["balance", "clarity", "progression"], word: "alignment", detailIndex: 1 },
+        { glyphs: ["ripple", "conflict", "harmony"], word: "reframing", detailIndex: 2 },
+      ];
+
+      const app = {
+        currentState: UIState.UI_1,
+        previousState: UIState.UI_0,
+        returnState: UIState.UI_4,
+        currentOutput: sampleOutputs[0],
+        history: [sampleOutputs[1], sampleOutputs[2], sampleOutputs[0]],
+        outputFocusIndex: 0,
+        outputMenuArmed: false,
+        menuIndex: 0,
+        historyIndex: 0,
+        settingsIndex: 0,
+        detailGlyphIndex: 0,
+        lexiconIndex: 0,
+        idleDialPosition: 0,
+        potentiometer: 0,
+        processTimer: null,
+        splashTimer: null,
+        sampleCursor: 0,
+        transitionNotes: [],
+        settings: {
+          context: true,
+          recording: true,
+          lowData: false,
+          batterySaver: false,
+        },
+      };
+
+      const screenRoot = document.getElementById("screenRoot");
+      const statusRail = document.getElementById("statusRail");
+      const transitionLog = document.getElementById("transitionLog");
+      const potentiometer = document.getElementById("potentiometer");
+      const potValue = document.getElementById("potValue");
+      const recordButton = document.getElementById("recordButton");
+      const selectButton = document.getElementById("selectButton");
+      const backButton = document.getElementById("backButton");
+      const potLeftButton = document.getElementById("potLeftButton");
+      const potRightButton = document.getElementById("potRightButton");
+
+      function clearTimers() {
+        window.clearTimeout(app.processTimer);
+        window.clearTimeout(app.splashTimer);
+        app.processTimer = null;
+        app.splashTimer = null;
+      }
+
+      function pushTransition(note) {
+        app.transitionNotes.unshift(note);
+        app.transitionNotes = app.transitionNotes.slice(0, 6);
+      }
+
+      function setState(nextState, reason) {
+        clearTimers();
+        app.previousState = app.currentState;
+        app.currentState = nextState;
+        if (reason) {
+          pushTransition(`${nextState} - ${reason}`);
+        }
+        render();
+      }
+
+      function startSplash() {
+        setState(UIState.UI_1, "boot splash");
+        app.splashTimer = window.setTimeout(() => {
+          setState(UIState.UI_0, "splash complete");
+        }, 1200);
+      }
+
+      function startProcessing() {
+        setState(UIState.UI_3, "recording released");
+        app.processTimer = window.setTimeout(() => {
+          app.currentOutput = sampleOutputs[app.sampleCursor % sampleOutputs.length];
+          app.sampleCursor += 1;
+          app.outputFocusIndex = 0;
+          app.outputMenuArmed = false;
+          app.detailGlyphIndex = app.currentOutput.detailIndex || 0;
+          app.history.unshift(app.currentOutput);
+          app.history = app.history.slice(0, 8);
+          setState(UIState.UI_4, "processing complete");
+        }, 1600);
+      }
+
+      function clampWrap(value, max) {
+        return (value + max) % max;
+      }
+
+      function rotatePot(delta) {
+        app.potentiometer = clampWrap(app.potentiometer + delta, 42);
+        potentiometer.value = String(app.potentiometer);
+        potValue.textContent = String(app.potentiometer);
+        handlePotentiometer(delta);
+      }
+
+      function syncPotFromSlider(nextValue) {
+        const numeric = Number(nextValue);
+        const diff = numeric - app.potentiometer;
+        if (diff === 0) {
+          return;
+        }
+        const steps = Math.abs(diff);
+        const direction = diff > 0 ? 1 : -1;
+        for (let index = 0; index < steps; index += 1) {
+          app.potentiometer = clampWrap(app.potentiometer + direction, 42);
+          handlePotentiometer(direction);
+        }
+        potentiometer.value = String(app.potentiometer);
+        potValue.textContent = String(app.potentiometer);
+      }
+
+      function handleRecordPress() {
+        // UI_0 is the only valid entry point for capture.
+        if (app.currentState === UIState.UI_0) {
+          setState(UIState.UI_2, "record button held");
+        }
+      }
+
+      function handleRecordRelease() {
+        // Releasing the hold ends recording and immediately enters processing.
+        if (app.currentState === UIState.UI_2) {
+          startProcessing();
+        }
+      }
+
+      function handleSelect() {
+        switch (app.currentState) {
+          case UIState.UI_0:
+            if (app.idleDialPosition === 1) {
+              app.menuIndex = 0;
+              app.returnState = UIState.UI_0;
+              setState(UIState.UI_MENU, "idle menu open");
+            }
+            break;
+          case UIState.UI_4:
+            if (app.outputMenuArmed) {
+              app.menuIndex = 0;
+              app.returnState = UIState.UI_4;
+              setState(UIState.UI_MENU, "output menu open");
+            } else {
+              app.detailGlyphIndex = app.outputFocusIndex;
+              app.returnState = UIState.UI_4;
+              setState(UIState.UI_5a, "selected glyph detail");
+            }
+            break;
+          case UIState.UI_MENU:
+            if (menuOptions[app.menuIndex] === "Lexicon") {
+              app.lexiconIndex = 0;
+              setState(UIState.UI_3a, "lexicon open");
+            } else if (menuOptions[app.menuIndex] === "History") {
+              setState(UIState.UI_3b, "history open");
+            } else if (menuOptions[app.menuIndex] === "Settings") {
+              setState(UIState.UI_3c, "settings open");
+            }
+            break;
+          case UIState.UI_3a:
+            pushTransition("UI_3a - select ignored");
+            render();
+            break;
+          case UIState.UI_3b:
+            app.currentOutput = app.history[app.historyIndex];
+            app.outputFocusIndex = 0;
+            app.outputMenuArmed = false;
+            app.returnState = UIState.UI_3b;
+            setState(UIState.UI_4, "history item opened");
+            break;
+          case UIState.UI_3c: {
+            const selected = settingsOptions[app.settingsIndex];
+            app.settings[selected.key] = !app.settings[selected.key];
+            pushTransition(`UI_3c - toggled ${selected.label}`);
+            render();
+            break;
+          }
+          case UIState.UI_5a:
+            setState(UIState.UI_4, "detail closed");
+            break;
+          default:
+            break;
+        }
+      }
+
+      function handleBack() {
+        switch (app.currentState) {
+          case UIState.UI_2:
+            setState(UIState.UI_0, "recording cancelled");
+            break;
+          case UIState.UI_3:
+            setState(UIState.UI_0, "processing cancelled");
+            break;
+          case UIState.UI_4:
+            setState(UIState.UI_0, "output dismissed");
+            break;
+          case UIState.UI_MENU:
+            setState(app.returnState, "menu closed");
+            break;
+          case UIState.UI_3a:
+          case UIState.UI_3b:
+          case UIState.UI_3c:
+            setState(UIState.UI_MENU, "return to menu");
+            break;
+          case UIState.UI_5a:
+            setState(UIState.UI_4, "detail back");
+            break;
+          default:
+            break;
+        }
+      }
+
+      function handlePotentiometer(delta) {
+        switch (app.currentState) {
+          case UIState.UI_0:
+            app.idleDialPosition = clampWrap(app.idleDialPosition + delta, 2);
+            break;
+          case UIState.UI_4:
+            // Output cycles across three glyphs; every fourth detent arms menu access.
+            {
+              const basis = app.outputMenuArmed ? 3 : app.outputFocusIndex;
+              const nextIndex = clampWrap(basis + delta, 4);
+              if (nextIndex === 3) {
+                app.outputMenuArmed = true;
+              } else {
+                app.outputMenuArmed = false;
+                app.outputFocusIndex = nextIndex;
+              }
+            }
+            break;
+          case UIState.UI_MENU:
+            app.menuIndex = clampWrap(app.menuIndex + delta, menuOptions.length);
+            break;
+          case UIState.UI_3a:
+            app.lexiconIndex = clampWrap(app.lexiconIndex + delta, lexiconGlyphIds.length);
+            break;
+          case UIState.UI_3b:
+            app.historyIndex = clampWrap(app.historyIndex + delta, Math.min(3, app.history.length));
+            break;
+          case UIState.UI_3c:
+            app.settingsIndex = clampWrap(app.settingsIndex + delta, settingsOptions.length);
+            break;
+          case UIState.UI_5a:
+            app.detailGlyphIndex = clampWrap(app.detailGlyphIndex + delta, app.currentOutput.glyphs.length);
+            break;
+          default:
+            break;
+        }
+        render();
+      }
+
+      function getGlyph(glyphId) {
+        return glyphLibrary[glyphId] || {
+          title: glyphId,
+          tags: ["placeholder"],
+          interpretation: "Placeholder glyph description.",
+          prompts: ["What is present here?"],
+        };
+      }
+
+      function glyphImage(glyphId, alt) {
+        return `<img src="glyphs/${glyphId}.png" alt="${alt}" />`;
+      }
+
+      function renderFrame(title, meta, body, footerLeft, footerRight) {
+        return `
+          <header class="screen-head">
+            <div>
+              ${title ? `<h3 class="screen-title">${title}</h3>` : ""}
+            </div>
+            <div class="screen-meta">${meta}</div>
+          </header>
+          <div class="screen-body">${body}</div>
+          <footer class="screen-footer">
+            <div class="footer-meta">${footerLeft}</div>
+            <div class="footer-meta">${footerRight}</div>
+          </footer>
+        `;
+      }
+
+      function renderIdle() {
+        const body = `
+          <div class="plus-screen">
+            <div class="plus-mark">+</div>
+          </div>
+        `;
+        const footerLeft = app.idleDialPosition === 1 ? "◉ Menu armed" : "◯ Hold record";
+        return renderFrame("Idle", "UI_0", body, footerLeft, "Select to menu");
+      }
+
+      function renderSplash() {
+        const body = `
+          <div class="center-stack">
+            <div class="mark" style="width: 138px; height: 62px;"></div>
+            <div class="center-copy">Palm-sized digital oracle for reflection.</div>
+          </div>
+        `;
+        return renderFrame("Nara", "UI_1", body, "boot", "auto");
+      }
+
+      function renderListening() {
+        const body = `
+          <div class="center-stack">
+            <div class="record-ring is-live" aria-hidden="true"></div>
+            <div class="center-copy">Listening. Release the record button to end capture.</div>
+          </div>
+        `;
+        return renderFrame("Listening", "UI_2", body, "hold active", "back cancels");
+      }
+
+      function renderProcessing() {
+        const body = `
+          <div class="center-stack">
+            <div class="thinking">Processing</div>
+            <div class="center-copy">Speech to context, context to glyphs, glyphs to word.</div>
+          </div>
+        `;
+        return renderFrame("Processing", "UI_3", body, "working", "auto to output");
+      }
+
+      function renderOutput() {
+        const output = app.currentOutput;
+        const cards = output.glyphs.map((glyphId, index) => {
+          const classes = [
+            "glyph-card",
+            index === 0 ? "glyph-a" : index === 1 ? "glyph-b" : "glyph-c",
+            app.outputFocusIndex === index ? "is-active" : "",
+          ].join(" ").trim();
+          return `<div class="${classes}">${glyphImage(glyphId, `${glyphId} glyph`)}</div>`;
+        }).join("");
+
+        const body = `
+          <div class="output-grid">
+            <div class="output-word">${output.word}</div>
+            ${cards}
+          </div>
+        `;
+
+        const footerLeft = app.outputMenuArmed
+          ? "Menu armed"
+          : `Glyph ${app.outputFocusIndex + 1} selected`;
+        return renderFrame("", "UI_4", body, footerLeft, "Back to idle");
+      }
+
+      function renderMenu() {
+        const body = `
+          <div class="list">
+            ${menuOptions.map((item, index) => `
+              <div class="list-row ${index === app.menuIndex ? "is-active" : ""}">
+                <div class="list-label">${item}</div>
+                <div class="list-copy">${
+                  item === "Lexicon"
+                    ? "Ring carousel of all glyphs"
+                    : item === "History"
+                      ? "Past outputs"
+                      : "System toggles"
+                }</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        return renderFrame("Menu", "UI_MENU", body, "Rotate to choose", "Back returns");
+      }
+
+      function renderLexicon() {
+        const visibleCount = Math.min(22, lexiconGlyphIds.length);
+        const centerX = 110;
+        const centerY = 84;
+        const radiusX = 74;
+        const radiusY = 56;
+        const beforeCenter = Math.floor((visibleCount - 1) / 2);
+        const afterCenter = visibleCount - 1 - beforeCenter;
+        const glyphs = [];
+
+        for (let offset = -beforeCenter; offset <= afterCenter; offset += 1) {
+          const glyphIndex = clampWrap(app.lexiconIndex + offset, lexiconGlyphIds.length);
+          const glyphId = lexiconGlyphIds[glyphIndex];
+          if (offset === 0) {
+            glyphs.push(`
+              <div
+                class="lexicon-glyph is-center"
+                style="left:${centerX}px; top:${centerY}px; width:76px; height:76px; z-index:30; opacity:1;"
+              >
+                ${glyphImage(glyphId, `${glyphId} centered glyph`)}
+              </div>
+            `);
+            continue;
+          }
+
+          const ringOffset = offset < 0 ? offset + beforeCenter + 1 : offset + beforeCenter;
+          const angle = ((ringOffset / (visibleCount - 1)) * Math.PI * 2) - Math.PI / 2;
+          const left = centerX + Math.cos(angle) * radiusX;
+          const top = centerY + Math.sin(angle) * radiusY;
+          const distance = Math.abs(offset);
+          const size = Math.max(20, 34 - distance);
+          const opacity = Math.max(0.28, 1 - distance * 0.08);
+          const zIndex = 20 - distance;
+
+          glyphs.push(`
+            <div
+              class="lexicon-glyph"
+              style="left:${left}px; top:${top}px; width:${size}px; height:${size}px; z-index:${zIndex}; opacity:${opacity};"
+            >
+              ${glyphImage(glyphId, `${glyphId} lexicon glyph`)}
+            </div>
+          `);
+        }
+
+        const body = `
+          <div class="lexicon-ring">
+            ${glyphs.join("")}
+          </div>
+        `;
+        return renderFrame("Lexicon", "UI_3a", body, "Rotate ring", "Back to menu");
+      }
+
+      function renderHistory() {
+        const visibleHistory = app.history.slice(0, 3);
+        const body = `
+          <div class="list">
+            ${visibleHistory.map((entry, index) => `
+              <div class="list-row history-row ${index === app.historyIndex ? "is-active" : ""}">
+                <div class="history-word">${entry.word}</div>
+                <div class="history-glyphs">
+                  ${entry.glyphs.map((glyphId) => glyphImage(glyphId, `${glyphId} history glyph`)).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        return renderFrame("History", "UI_3b", body, "Select opens output", "Back to menu");
+      }
+
+      function renderSettings() {
+        const body = `
+          <div class="list">
+            ${settingsOptions.map((option, index) => `
+              <div class="toggle-row list-row ${index === app.settingsIndex ? "is-active" : ""}">
+                <div class="list-label">${option.label}</div>
+                <div class="toggle-state">${app.settings[option.key] ? "☑ on" : "☒ off"}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        return renderFrame("Settings", "UI_3c", body, "Select toggles", "Back to menu");
+      }
+
+      function renderDetail() {
+        const glyphId = app.currentOutput.glyphs[app.detailGlyphIndex];
+        const body = `
+          <div class="detail-stack">
+            <div class="detail-image">
+              ${glyphImage(glyphId, `${glyphId} focused glyph`)}
+            </div>
+          </div>
+        `;
+        return renderFrame("Glyph", "UI_5a", body, "Rotate glyphs", "Back returns");
+      }
+
+      function renderStatus() {
+        const tokens = [
+          `${app.currentState}`,
+          `Pot ${app.potentiometer}`,
+          `History ${app.history.length}`,
+          app.settings.context ? "Context on" : "Context off",
+          app.settings.lowData ? "Low data" : "Full data",
+        ];
+        statusRail.innerHTML = tokens.map((token) => `<div class="status-token">${token}</div>`).join("");
+      }
+
+      function renderTransitions() {
+        transitionLog.innerHTML = app.transitionNotes.map((note) => `
+          <div class="list-row is-dashed">
+            <div class="list-copy">${note}</div>
+          </div>
+        `).join("");
+      }
+
+      function render() {
+        let markup = "";
+        switch (app.currentState) {
+          case UIState.UI_0:
+            markup = renderIdle();
+            break;
+          case UIState.UI_1:
+            markup = renderSplash();
+            break;
+          case UIState.UI_2:
+            markup = renderListening();
+            break;
+          case UIState.UI_3:
+            markup = renderProcessing();
+            break;
+          case UIState.UI_4:
+            markup = renderOutput();
+            break;
+          case UIState.UI_MENU:
+            markup = renderMenu();
+            break;
+          case UIState.UI_3a:
+            markup = renderLexicon();
+            break;
+          case UIState.UI_3b:
+            markup = renderHistory();
+            break;
+          case UIState.UI_3c:
+            markup = renderSettings();
+            break;
+          case UIState.UI_5a:
+            markup = renderDetail();
+            break;
+          default:
+            markup = renderIdle();
+            break;
+        }
+        screenRoot.innerHTML = markup;
+        renderStatus();
+        renderTransitions();
+      }
+
+      recordButton.addEventListener("mousedown", handleRecordPress);
+      recordButton.addEventListener("mouseup", handleRecordRelease);
+      recordButton.addEventListener("mouseleave", handleRecordRelease);
+      recordButton.addEventListener("touchstart", (event) => {
+        event.preventDefault();
+        handleRecordPress();
+      }, { passive: false });
+      recordButton.addEventListener("touchend", handleRecordRelease);
+      selectButton.addEventListener("click", handleSelect);
+      backButton.addEventListener("click", handleBack);
+      potLeftButton.addEventListener("click", () => rotatePot(-1));
+      potRightButton.addEventListener("click", () => rotatePot(1));
+      potentiometer.addEventListener("input", (event) => syncPotFromSlider(event.target.value));
+
+      const pressedKeys = new Set();
+      window.addEventListener("keydown", (event) => {
+        if (pressedKeys.has(event.code)) {
+          return;
+        }
+        pressedKeys.add(event.code);
+
+        if (event.code === "KeyR") {
+          event.preventDefault();
+          handleRecordPress();
+        } else if (event.code === "Enter") {
+          event.preventDefault();
+          handleSelect();
+        } else if (event.code === "Backspace") {
+          event.preventDefault();
+          handleBack();
+        } else if (event.code === "ArrowLeft") {
+          event.preventDefault();
+          rotatePot(-1);
+        } else if (event.code === "ArrowRight") {
+          event.preventDefault();
+          rotatePot(1);
+        }
+      });
+
+      window.addEventListener("keyup", (event) => {
+        pressedKeys.delete(event.code);
+        if (event.code === "KeyR") {
+          event.preventDefault();
+          handleRecordRelease();
+        }
+      });
+
+      pushTransition("UI_1 - startup");
+      startSplash();
+    </script>
+  </body>
+</html>

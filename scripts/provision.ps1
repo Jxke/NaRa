@@ -3,7 +3,10 @@ param(
   [Parameter(Mandatory = $true)][string]$WifiSsid,
   [Parameter(Mandatory = $true)][string]$WifiPassword,
   [Parameter(Mandatory = $true)][string]$DeepgramApiKey,
-  [Parameter(Mandatory = $true)][string]$OpenAIApiKey,
+  [string]$SupabaseUrl,
+  [string]$SupabaseAnonKey,
+  [string]$DeviceApiKey,
+  [string]$OpenAIApiKey,
   [string]$OpenAIBaseUrl = "https://api.openai.com",
   [string]$OpenAIModel = "gpt-4.1-nano",
   [string]$DeepgramModel = "nova-2-general",
@@ -11,17 +14,36 @@ param(
   [string]$SystemPrompt = "You are a concise embedded assistant."
 )
 
+if ([string]::IsNullOrWhiteSpace($SupabaseUrl) -and [string]::IsNullOrWhiteSpace($OpenAIApiKey)) {
+  throw "Provide either -SupabaseUrl/-DeviceApiKey for the Nara pipeline or -OpenAIApiKey for the legacy OpenAI path."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SupabaseUrl) -and ([string]::IsNullOrWhiteSpace($SupabaseAnonKey) -or [string]::IsNullOrWhiteSpace($DeviceApiKey))) {
+  throw "When -SupabaseUrl is set, -SupabaseAnonKey and -DeviceApiKey are also required."
+}
+
 $payload = @{
   wifi_ssid = $WifiSsid
   wifi_password = $WifiPassword
   deepgram_api_key = $DeepgramApiKey
   deepgram_model = $DeepgramModel
   deepgram_language = $DeepgramLanguage
-  openai_apiKey = $OpenAIApiKey
   openai_apiBaseUrl = $OpenAIBaseUrl
   openai_model = $OpenAIModel
   system_prompt = $SystemPrompt
-} | ConvertTo-Json -Compress
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SupabaseUrl)) {
+  $payload.supabase_url = $SupabaseUrl
+  $payload.supabase_anon_key = $SupabaseAnonKey
+  $payload.device_api_key = $DeviceApiKey
+}
+
+if (-not [string]::IsNullOrWhiteSpace($OpenAIApiKey)) {
+  $payload.openai_apiKey = $OpenAIApiKey
+}
+
+$payload = $payload | ConvertTo-Json -Compress
 
 $serialPort = New-Object System.IO.Ports.SerialPort
 $serialPort.PortName = $Port
