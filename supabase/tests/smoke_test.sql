@@ -55,17 +55,17 @@ begin
 end $$;
 
 -- ============================================================================
--- 3. Verify all 22 glyphs are seeded
+-- 3. Verify all 42 glyphs are seeded
 -- ============================================================================
 do $$
 declare
   glyph_count int;
 begin
   select count(*) into glyph_count from public.glyphs;
-  if glyph_count != 22 then
-    raise exception 'FAIL: Expected 22 glyphs, found %', glyph_count;
+  if glyph_count != 42 then
+    raise exception 'FAIL: Expected 42 glyphs, found %', glyph_count;
   end if;
-  raise notice 'PASS: 22 glyphs seeded';
+  raise notice 'PASS: 42 glyphs seeded';
 end $$;
 
 -- ============================================================================
@@ -76,15 +76,14 @@ declare
   bad_glyphs int;
 begin
   select count(*) into bad_glyphs from public.glyphs
-  where array_length(labels, 1) is null
-     or array_length(tags, 1) is null
+  where array_length(tags, 1) is null
      or array_length(interpretations, 1) is null
-     or array_length(stories, 1) is null
+     or array_length(prompt_questions, 1) is null
      or bitmap_url is null;
   if bad_glyphs > 0 then
     raise exception 'FAIL: % glyphs have missing data', bad_glyphs;
   end if;
-  raise notice 'PASS: All glyphs have labels, tags, interpretations, stories, bitmap_url';
+  raise notice 'PASS: All glyphs have tags, interpretations, prompt_questions, bitmap_url';
 end $$;
 
 -- ============================================================================

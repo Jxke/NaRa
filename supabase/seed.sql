@@ -1,489 +1,689 @@
 -- seed.sql
--- Seed data for the 22 archetypal glyphs
--- Each glyph is intentionally ambiguous — meaning emerges from context and interpretation
+-- Seed data for the 42 NaRa glyphs
+-- Meaning emerges through tags, interpretations, and prompt questions.
 
-insert into public.glyphs (id, labels, tags, interpretations, stories, bitmap_url) values
+delete from public.glyphs;
 
--- 1. SPIRAL
+insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_url) values
 (
-  'spiral',
-  array['Spiral', 'Unfurling', 'Vortex'],
-  array['growth', 'recursion', 'time', 'inward', 'cycles'],
+  'venture',
+  array['beginnings', 'leap of faith', 'becoming', 'unfolding'],
   array[
-    'A pattern repeating at a different scale',
-    'Returning to something familiar with new understanding',
-    'Getting drawn deeper into a question',
-    'Growth that looks like going in circles',
-    'The tightening focus before a breakthrough',
-    'Losing yourself in something deliberately',
-    'A conversation that keeps circling the same unsaid thing'
+    'Something is beginning to take shape, even if it''s not visible yet',
+    'You are in an early stage that requires care, not force',
+    'Growth is happening quietly beneath the surface'
   ],
   array[
-    'She traced the nautilus shell and realized her career had the same shape — the same problems at every level, but she was larger each time she met them.',
-    'The old man walked the labyrinth every morning. He said it was never the same path twice, even though the stones never moved.',
-    'They kept returning to the same argument, but each time the silence afterward was a little shorter.'
+    'What is beginning to take shape?',
+    'What might be emerging that you haven''t fully recognized yet?',
+    'What beginning needs care?',
+    'What is quietly starting in your life right now?'
   ],
-  'glyphs/spiral.bmp'
+  'glyphs/venture.bmp'
 ),
-
--- 2. MIRROR
 (
-  'mirror',
-  array['Mirror', 'Reflection', 'Double'],
-  array['self', 'truth', 'perception', 'honesty', 'duality'],
+  'manifestation',
+  array['focus', 'intention', 'energy', 'convergence', 'orbit'],
   array[
-    'Seeing yourself clearly for the first time in a while',
-    'Someone reflecting your own behavior back to you',
-    'The gap between how you see yourself and how others do',
-    'A confrontation with something you have been avoiding',
-    'Recognizing a pattern in yourself you thought you had outgrown',
-    'Finding yourself in someone else''s story',
-    'The version of you that exists in other people''s minds',
-    'A moment of painful clarity'
+    'Energy is being directed toward a center',
+    'Multiple forces are aligning or syncing',
+    'What you focus on is shaping outcome'
   ],
   array[
-    'He listened to the recording of his own voice and did not recognize the person speaking. Not the sound — the certainty.',
-    'The twins grew up in different cities and met at thirty. They had the same laugh but opposite fears.'
+    'What are you channeling your energy toward right now?',
+    'Where is your attention naturally returning?',
+    'What feels like it''s coming into alignment?'
   ],
-  'glyphs/mirror.bmp'
+  'glyphs/manifestation.bmp'
 ),
-
--- 3. BRIDGE
 (
-  'bridge',
-  array['Bridge', 'Span', 'Crossing'],
-  array['connection', 'transition', 'risk', 'between', 'commitment'],
+  'intuition',
+  array['mystery', 'ambiguity', 'perception', 'subconscious', 'insight'],
   array[
-    'A difficult conversation that needs to happen',
-    'The space between deciding and doing',
-    'Reaching toward someone across a divide',
-    'A compromise that costs something real',
-    'Building trust one small gesture at a time',
-    'The vulnerable moment of asking for help',
-    'Translating between two worlds you inhabit',
-    'Leaving one shore before you can see the other'
+    'Signals from the outside world are being gathered into inner understanding',
+    'The subconscious is recognizing patterns before the conscious mind does',
+    'Clarity emerges not from searching outward, but from receiving inward',
+    'Meaning exists within ambiguity and insight comes from sitting with it'
   ],
   array[
-    'She wrote the email seven times. Each draft was shorter. The one she sent was three words.',
-    'The interpreter sat between the two delegations and realized she was not translating languages — she was translating griefs.',
-    'He drove halfway across the country to say something he could have texted, because some bridges have to be crossed on foot.'
+    'What are you sensing beneath the surface and why haven''t you named it yet?',
+    'What are you sensing beneath the surface?',
+    'Where are you picking up on something without clear evidence?',
+    'What feels understood without being fully explained?'
   ],
-  'glyphs/bridge.bmp'
+  'glyphs/intuition.bmp'
 ),
-
--- 4. FLAME
 (
-  'flame',
-  array['Flame', 'Burn', 'Ignition'],
-  array['passion', 'destruction', 'urgency', 'warmth', 'transformation'],
+  'abundance',
+  array['nature', 'expansion', 'multiplicity', 'growth', 'regeneration', 'interconnection', 'fertility', 'emergence'],
   array[
-    'Something that excites and frightens you equally',
-    'Intensity that cannot be sustained but must be honored',
-    'Burning away what no longer serves',
-    'The spark of an idea that won''t leave you alone',
-    'Anger that is actually grief',
-    'The warmth you offer others at a cost to yourself',
-    'A deadline that clarifies everything',
-    'Creative energy that feels almost dangerous'
+    'Growth happens through layering and repetition, not singular force',
+    'What begins as one becomes many through time and conditions',
+    'Abundance emerges from interconnected systems, not isolation',
+    'Regeneration ensures that what is given returns in new forms'
   ],
   array[
-    'The potter broke every piece from that month. She said the kiln had shown her they were all rehearsals.',
-    'He quit on a Tuesday with nothing lined up. His hands stopped shaking for the first time in a year.'
+    'What is quietly multiplying in your life and are you letting it?',
+    'What is beginning to multiply or expand?',
+    'Where is growth happening gradually over time?',
+    'What feels supported by its environment?'
   ],
-  'glyphs/flame.bmp'
+  'glyphs/abundance.bmp'
 ),
-
--- 5. SEED
 (
-  'seed',
-  array['Seed', 'Dormancy', 'Potential'],
-  array['beginning', 'patience', 'latent', 'future', 'small'],
+  'structure',
+  array['action', 'personal power', 'control', 'discipline', 'strength', 'endurance', 'effort', 'resilience'],
   array[
-    'Something planted long ago that is only now showing',
-    'A small action with consequences you cannot yet see',
-    'Waiting for the right conditions, not the right moment',
-    'The earliest stage of something that will become important',
-    'An idea too fragile to share yet',
-    'Trust that what you have started will grow without your constant attention',
-    'The quiet accumulation of small choices'
+    'Power is built through sustained effort, not bursts of force',
+    'Control is being exercised, but may be rigid or over-applied',
+    'Strength is forming through repetition and resistance',
+    'Effort is present, but its direction may need examination'
   ],
   array[
-    'The letter arrived twenty years after it was written. The apology still mattered.',
-    'She planted the oak knowing she would never sit in its shade. Her granddaughter did.',
-    'He started learning the language with no trip planned. Three years later, the trip planned itself.'
+    'What are you trying to control and is that control supporting you or constraining you?',
+    'What is requiring consistency or discipline?',
+    'Where is effort being applied repeatedly?',
+    'What feels shaped through control or direction?'
   ],
-  'glyphs/seed.bmp'
+  'glyphs/structure.bmp'
 ),
-
--- 6. WAVE
 (
-  'wave',
-  array['Wave', 'Surge', 'Rhythm'],
-  array['emotion', 'cycles', 'momentum', 'release', 'natural'],
+  'conformity',
+  array['teacher', 'tradition', 'guidance', 'authority', 'imitation', 'learning', 'structure'],
   array[
-    'An emotion arriving without warning or permission',
-    'The natural rhythm of effort and rest',
-    'Momentum that carries you further than you intended',
-    'Grief that comes in waves, not stages',
-    'Surrendering to a process you cannot control',
-    'The rising energy before a change',
-    'Something building beneath the surface'
+    'Guidance is being followed, though it may not be internally defined',
+    'Learning is occurring through imitation rather than exploration',
+    'Structure is present and may influence individual expression',
+    'Authority is shaping direction, whether consciously or unconsciously',
+    'There is a relationship between belonging and self-definition'
   ],
   array[
-    'The surfer said the wave does not care about your plans. You ride it or you don''t, but it''s coming either way.',
-    'She cried in the grocery store for no reason she could name. Later she realized it was relief.'
+    'How much of your direction is shaped by what you''ve been shown?',
+    'Where are you following an existing model?',
+    'What feels influenced by external guidance?'
   ],
-  'glyphs/wave.bmp'
+  'glyphs/conformity.bmp'
 ),
-
--- 7. ECLIPSE
 (
-  'eclipse',
-  array['Eclipse', 'Shadow', 'Occultation'],
-  array['hidden', 'temporary', 'perspective', 'awe', 'alignment'],
+  'divergence',
+  array['choices', 'alignment', 'union', 'separation', 'overlap', 'pathways', 'intersection'],
   array[
-    'Something important temporarily obscured',
-    'A rare alignment of forces in your life',
-    'The shadow of one priority falling across another',
-    'Beauty in something that cannot last',
-    'A brief window of unusual clarity',
-    'What becomes visible only when the obvious is blocked',
-    'The strange calm at the center of an overwhelming moment',
-    'Two parts of your life overlapping in an unexpected way'
+    'Multiple paths are present, with areas of overlap and separation',
+    'Choices may share common ground before moving in different directions',
+    'Alignment exists, though it may not extend across all options',
+    'Union and divergence are occurring at the same time'
   ],
   array[
-    'During the blackout, the neighbors met for the first time in years. When the power returned, they kept the candles lit.',
-    'He lost his voice for a week. In the silence, he heard what his family had been trying to tell him.'
+    'How do these paths relate to one another before they split?',
+    'Where do paths begin to separate?',
+    'What options share common ground before splitting?'
   ],
-  'glyphs/eclipse.bmp'
+  'glyphs/divergence.bmp'
 ),
-
--- 8. COMPASS
 (
-  'compass',
-  array['Compass', 'Bearing', 'North'],
-  array['direction', 'values', 'orientation', 'choice', 'clarity'],
+  'determination',
+  array['focus', 'aim', 'direction', 'intent', 'momentum'],
   array[
-    'Knowing your direction even when the path is unclear',
-    'A value that orients you when everything else is uncertain',
-    'The difference between where you are heading and where you thought you would be',
-    'Recalibrating after a period of drift',
-    'Someone who helps you find your bearing',
-    'The question that cuts through noise',
-    'Trusting your sense of direction over the map'
+    'Energy is directed toward a specific target',
+    'Focus narrows attention toward a single outcome',
+    'Momentum builds through continued orientation toward that point',
+    'Distraction is reduced in favor of precision'
   ],
   array[
-    'She asked herself the same question every year on her birthday: would the person I was at twenty be proud or relieved?',
-    'The sailor threw away the chart and followed the stars. He arrived somewhere he did not expect but could not argue with.'
+    'What are you aiming toward right now?',
+    'Where is your focus narrowing?',
+    'What direction feels most defined?'
   ],
-  'glyphs/compass.bmp'
+  'glyphs/determination.bmp'
 ),
-
--- 9. ANCHOR
 (
-  'anchor',
-  array['Anchor', 'Hold', 'Ground'],
-  array['stability', 'weight', 'grounding', 'commitment', 'roots'],
+  'courage',
+  array['endurance', 'effort', 'stamina', 'persistence', 'resilience', 'progression'],
   array[
-    'Something that keeps you steady when everything moves',
-    'A commitment that limits your freedom but gives you depth',
-    'The weight of responsibility you chose',
-    'A relationship that grounds you',
-    'The practice or ritual that holds your days together',
-    'Staying when leaving would be easier',
-    'The difference between being stuck and being rooted'
+    'Movement continues despite difficulty or resistance',
+    'Effort is sustained even when progress feels slow',
+    'The path requires ongoing engagement rather than quick resolution',
+    'Strength develops through staying with what is challenging'
   ],
   array[
-    'Every morning he made the same coffee in the same cup. It was the one thing that did not negotiate.',
-    'She kept the apartment long after she could afford better. It was where she had become herself.',
-    'The old dog could not walk far anymore, but he still went to the door every evening. Loyalty outlasts the legs.'
+    'What feels worth continuing, even when it''s difficult?',
+    'Where is effort being sustained over time?',
+    'What requires steady movement forward?'
   ],
-  'glyphs/anchor.bmp'
+  'glyphs/courage.bmp'
 ),
-
--- 10. PRISM
 (
-  'prism',
-  array['Prism', 'Spectrum', 'Refraction'],
-  array['complexity', 'perspective', 'analysis', 'beauty', 'multiplicity'],
+  'introspect',
+  array['solitude', 'wisdom', 'inward', 'reflection', 'self-awareness', 'perception'],
   array[
-    'A simple situation revealing unexpected complexity',
-    'Seeing all sides of something at once',
-    'Breaking a problem into its component parts',
-    'The many versions of a single truth',
-    'Finding beauty in analysis',
-    'A person who shows different faces in different contexts',
-    'The moment you realize a question has more than two answers',
-    'Appreciation for nuance over certainty'
+    'Attention is directed inward rather than outward',
+    'Self-perception is being observed or examined',
+    'Understanding is forming through reflection rather than action',
+    'Separation allows for clearer awareness of the self'
   ],
   array[
-    'The committee had seven members and seven different memories of the same meeting.',
-    'She held the glass to the window and watched white light become everything. She thought about her mother, who had always seemed simple.'
+    'What do you notice when you turn your attention inward?',
+    'Where is your attention directed within yourself?',
+    'What becomes visible through reflection?'
   ],
-  'glyphs/prism.bmp'
+  'glyphs/introspect.bmp'
 ),
-
--- 11. NEST
 (
-  'nest',
-  array['Nest', 'Haven', 'Shelter'],
-  array['safety', 'home', 'care', 'protection', 'nurture'],
+  'cascade',
+  array['chain reaction', 'consequence', 'momentum', 'cause-effect'],
   array[
-    'Creating safety for someone or something vulnerable',
-    'The urge to protect what you have built',
-    'A space you have made warm for others',
-    'The tension between shelter and confinement',
-    'Outgrowing a place that once held you perfectly',
-    'Building something from whatever materials are at hand',
-    'The quiet work of maintenance and care'
+    'One action is triggering others',
+    'Small shifts are creating larger outcomes',
+    'Momentum is building, intentionally or not'
   ],
   array[
-    'The bird used a strand of his daughter''s hair in the nest outside the window. He left the window open all spring.',
-    'She redecorated the room three times before admitting it was not the room she was trying to fix.'
+    'What did you set in motion and where is it leading?',
+    'What has been set into motion?',
+    'Where are small actions creating larger effects?',
+    'How is momentum building from earlier steps?'
   ],
-  'glyphs/nest.bmp'
+  'glyphs/cascade.bmp'
 ),
-
--- 12. THRESHOLD
+(
+  'balance',
+  array['trust', 'equilibrium', 'fairness', 'stability', 'alignment', 'steadiness'],
+  array[
+    'Stability is maintained through careful distribution of weight',
+    'Multiple elements are held in relation rather than isolation',
+    'Equilibrium depends on subtle adjustments over time',
+    'Trust is placed in the structure to hold without collapse'
+  ],
+  array[
+    'What is holding things in place right now?',
+    'What is being held in equilibrium?',
+    'Where are adjustments maintaining stability?',
+    'What feels carefully distributed?'
+  ],
+  'glyphs/balance.bmp'
+),
+(
+  'surrender',
+  array['yielding', 'redirection', 'pause', 'allowance', 'shift'],
+  array[
+    'Force gives way to redirection rather than resistance',
+    'Movement adapts instead of pushing forward',
+    'Pause creates space for alternative paths',
+    'Control loosens in favor of responsiveness'
+  ],
+  array[
+    'What changes when you stop pushing here?',
+    'What changes when pressure is reduced?',
+    'Where might a shift in direction occur naturally?',
+    'What happens when control loosens?'
+  ],
+  'glyphs/surrender.bmp'
+),
+(
+  'transformation',
+  array['relief', 'renewal', 'rebirth', 'evolution'],
+  array[
+    'A shift has occurred, resulting in a new form or state',
+    'What was once constrained is now able to move freely',
+    'Change is not abrupt, but the result of a prior process',
+    'Emergence follows a period of development or transition'
+  ],
+  array[
+    'What feels different now compared to before?',
+    'Where has a change already taken place?',
+    'What has moved into a new form?'
+  ],
+  'glyphs/transformation.bmp'
+),
+(
+  'harmony',
+  array['flow', 'divine timing', 'balance', 'alignment', 'ease', 'unfolding'],
+  array[
+    'Elements are unfolding in a way that feels natural rather than forced',
+    'Timing appears to align without the need for control',
+    'Balance is achieved through allowing rather than adjusting',
+    'Growth emerges from conditions being in sync'
+  ],
+  array[
+    'Where does this feel like it''s unfolding on its own?',
+    'What seems to be aligning without force?',
+    'Where is balance occurring through flow?'
+  ],
+  'glyphs/harmony.bmp'
+),
+(
+  'restriction',
+  array['addiction', 'sabotage', 'dependency', 'attachment', 'limitation', 'entanglement'],
+  array[
+    'Movement is limited by something holding it in place',
+    'Patterns may be reinforcing themselves over time',
+    'Dependency is shaping behavior or direction',
+    'What supports may also be constraining'
+  ],
+  array[
+    'What feels difficult to move away from?',
+    'Where is movement being limited?',
+    'What patterns are holding something in place?'
+  ],
+  'glyphs/restriction.bmp'
+),
+(
+  'sudden',
+  array['sudden', 'break', 'upheaval', 'shock', 'disruption', 'rupture', 'shift'],
+  array[
+    'A break occurs abruptly, interrupting continuity',
+    'Stability is disrupted without gradual transition',
+    'Change happens faster than expected or prepared for',
+    'A previous state can no longer be maintained'
+  ],
+  array[
+    'What shifted more suddenly than you expected?',
+    'What changed without warning?',
+    'Where did stability shift quickly?',
+    'What feels disrupted or interrupted?'
+  ],
+  'glyphs/sudden.bmp'
+),
+(
+  'healing',
+  array['tend', 'hope', 'faith', 'softness'],
+  array[
+    'Recovery is in motion, even if not yet complete',
+    'Attention is being given to what needs care',
+    'Softness is present where there was strain or damage',
+    'Change is occurring through gentle, gradual repair'
+  ],
+  array[
+    'What feels like it''s beginning to mend?',
+    'Where is care being applied gently?',
+    'What is gradually being restored?'
+  ],
+  'glyphs/healing.bmp'
+),
+(
+  'illusion',
+  array['fear', 'dreams', 'anxiety', 'confusion', 'uncertainty', 'distortion'],
+  array[
+    'Perception is influenced by incomplete or unclear information',
+    'What is seen may not fully reflect what is present',
+    'Emotions are shaping interpretation of reality',
+    'Clarity is reduced, making direction less certain'
+  ],
+  array[
+    'What feels unclear or difficult to fully see?',
+    'Where might perception be influenced by uncertainty?',
+    'What seems present but not fully defined?'
+  ],
+  'glyphs/illusion.bmp'
+),
+(
+  'clarity',
+  array['optimism', 'illumination', 'understanding', 'awareness', 'insight', 'renewal'],
+  array[
+    'Something becomes visible that was previously unclear',
+    'Understanding is forming through increased awareness',
+    'Perspective shifts as more light is introduced',
+    'A new phase begins with greater sense of direction'
+  ],
+  array[
+    'What is becoming clearer to you now?',
+    'What is becoming easier to understand?',
+    'Where is something coming into focus?'
+  ],
+  'glyphs/clarity.bmp'
+),
+(
+  'awakening',
+  array['recall', 'acceptance', 'reflection', 'evaluation', 'awareness', 'realization'],
+  array[
+    'Attention is being drawn to something that was previously overlooked',
+    'Past experiences or choices are coming back into focus',
+    'Awareness increases, prompting reflection and evaluation',
+    'Recognition leads toward a shift in understanding'
+  ],
+  array[
+    'What is calling for your attention right now?',
+    'What is coming into awareness?',
+    'Where is attention being drawn back?'
+  ],
+  'glyphs/awakening.bmp'
+),
+(
+  'complete',
+  array['fulfillment', 'achievement', 'closure', 'resolution', 'integration', 'wholeness'],
+  array[
+    'A missing element has been found or placed',
+    'Parts are coming together into a coherent whole',
+    'A process or effort is reaching resolution',
+    'Something feels finished or fully formed'
+  ],
+  array[
+    'What feels like it has come together?',
+    'Where is something reaching resolution?',
+    'What seems finished or whole?'
+  ],
+  'glyphs/complete.bmp'
+),
+(
+  'industry',
+  array['labor', 'repetition', 'accumulation', 'diligence', 'consistency'],
+  array[
+    'Progress is built through small, repeated actions',
+    'Effort accumulates gradually over time',
+    'Work is distributed rather than concentrated',
+    'Output emerges from consistency rather than intensity'
+  ],
+  array[
+    'How are small actions contributing over time?',
+    'Where is effort accumulating gradually?',
+    'What is being built through repetition?'
+  ],
+  'glyphs/industry.bmp'
+),
+(
+  'transition',
+  array['openness', 'transition', 'progression', 'reflection', 'understanding', 'continuation'],
+  array[
+    'Information is being taken in and processed over time',
+    'Understanding develops through continued exposure and review',
+    'Something is open and available to be read, understood, or revealed',
+    'Attention is shifting forward, moving from one chapter or phase to the next'
+  ],
+  array[
+    'Is it time to turn the page?',
+    'What does moving forward from here look like?',
+    'Where is one phase giving way to another?',
+    'What feels like a shift between chapters?'
+  ],
+  'glyphs/transition.bmp'
+),
+(
+  'release',
+  array['flow', 'passage', 'letting go', 'movement', 'transition', 'time'],
+  array[
+    'What has happened is moving past and no longer held in place',
+    'Events are flowing away rather than being revisited',
+    'Time creates distance between experience and the present',
+    'Movement continues without needing to return to what was'
+  ],
+  array[
+    'Is this something that still needs to be held onto?',
+    'What feels like it''s already moving past?',
+    'Where is something no longer being held?',
+    'What is naturally flowing away?'
+  ],
+  'glyphs/release.bmp'
+),
+(
+  'duality',
+  array['contrast', 'duality', 'tension', 'perspective', 'division', 'coexistence'],
+  array[
+    'Two perspectives exist within the same form',
+    'Opposing directions are present at once',
+    'Internal tension may arise from holding multiple viewpoints',
+    'Difference does not require separation to exist'
+  ],
+  array[
+    'Can both directions be true at the same time?',
+    'Where are opposing directions present together?',
+    'How do these differences coexist?'
+  ],
+  'glyphs/duality.bmp'
+),
+(
+  'conflict',
+  array['direction', 'tension', 'choice', 'opposition', 'divergence', 'uncertainty'],
+  array[
+    'Multiple directions are present without clear alignment',
+    'Movement is pulled between opposing forces',
+    'Choice is required, but resolution may not yet be formed',
+    'Energy is divided rather than focused'
+  ],
+  array[
+    'Which direction feels most aligned right now?',
+    'Where is tension between options present?',
+    'What is pulling in different directions?'
+  ],
+  'glyphs/conflict.bmp'
+),
+(
+  'clouded',
+  array['uncertainty', 'obscurity', 'floating', 'abstraction', 'ambiguity', 'diffusion'],
+  array[
+    'Clarity is softened or partially obscured',
+    'Attention may feel lifted or detached from the immediate',
+    'Thoughts drift into imagination or abstraction',
+    'Understanding is present, but not fully defined',
+    'Conditions are temporary and subject to change'
+  ],
+  array[
+    'Where has your attention been drifting lately?',
+    'Where does attention feel unfocused or diffuse?',
+    'What feels partially obscured?'
+  ],
+  'glyphs/clouded.bmp'
+),
+(
+  'pour',
+  array['expression', 'outflow', 'release', 'giving', 'overflow'],
+  array[
+    'Something internal is moving outward',
+    'Containment shifts into expression',
+    'Accumulation reaches a point of release',
+    'Flow replaces holding'
+  ],
+  array[
+    'How is this moving outward?',
+    'How is something being expressed outward?',
+    'Where is release occurring?',
+    'What is moving from inside to outside?'
+  ],
+  'glyphs/pour.bmp'
+),
 (
   'threshold',
-  array['Threshold', 'Doorway', 'Liminal'],
-  array['transition', 'decision', 'boundary', 'beginning', 'courage'],
+  array['unknown', 'transition', 'entry', 'uncertainty', 'crossing', 'possibility'],
   array[
-    'Standing at the edge of a decision you cannot undo',
-    'The moment just before everything changes',
-    'A boundary between who you were and who you are becoming',
-    'The pause before entering a room',
-    'Recognizing a point of no return',
-    'The strange space between endings and beginnings',
-    'An invitation you are not sure you want to accept',
-    'The door you keep walking past'
+    'A boundary is being crossed from the known into the unknown',
+    'Movement forward involves entering something not yet visible',
+    'Clarity is reduced, but potential is present',
+    'There is a shift from one state or space into another'
   ],
   array[
-    'He stood in the doorway for so long that both rooms started to feel like hallways.',
-    'The graduate held her diploma and felt nothing. The feeling came three weeks later, in a supermarket, when she realized no one was expecting her anywhere.',
-    'They signed the lease and sat on the empty floor. The echo made everything they said sound like a question.'
+    'How do you relate to what lies beyond this threshold?',
+    'What lies beyond this point of entry?',
+    'Where does something new begin?'
   ],
   'glyphs/threshold.bmp'
 ),
-
--- 13. EMBER
 (
-  'ember',
-  array['Ember', 'Glow', 'Residual'],
-  array['persistence', 'memory', 'warmth', 'fading', 'endurance'],
+  'fire',
+  array['energy', 'intensity', 'passion', 'destruction', 'transformation', 'heat'],
   array[
-    'Something that was once intense but still glows quietly',
-    'A friendship that survives on very little contact',
-    'The last energy before rest',
-    'A feeling you thought was gone but is still warm',
-    'The remnant of a passion that shaped who you are',
-    'What remains after the fire of a crisis',
-    'Keeping something alive with careful attention'
+    'Energy is active and difficult to contain',
+    'Intensity can create or destroy depending on how it is held',
+    'Something is being consumed to make way for change',
+    'Heat accelerates processes that would otherwise take longer'
   ],
   array[
-    'They had not spoken in five years but she still set a place for him at Thanksgiving. Just in case.',
-    'The old notebook had one page left. He had been saving it for something worth writing. He wrote: I am still here.'
+    'Where is this intensity being directed?',
+    'Where is intensity present?',
+    'What is being fueled or consumed?'
   ],
-  'glyphs/ember.bmp'
+  'glyphs/fire.bmp'
 ),
-
--- 14. ROOTS
 (
-  'roots',
-  array['Roots', 'Foundation', 'Underground'],
-  array['origin', 'identity', 'depth', 'heritage', 'hidden'],
+  'pattern',
+  array['recursion', 'repetition', 'structure', 'scale', 'self-similarity', 'system'],
   array[
-    'The unseen structures that support what is visible',
-    'Reconnecting with where you came from',
-    'A problem whose real cause is deeper than it appears',
-    'The inherited patterns you carry without choosing',
-    'Drawing strength from your history',
-    'The work that nobody sees',
-    'Understanding why you react the way you do',
-    'Something fundamental that resists change'
+    'The same structure appears across different scales',
+    'Patterns repeat in ways that connect small and large forms',
+    'A system is unfolding through consistent internal logic',
+    'What appears complex is built from simple repeating rules'
   ],
   array[
-    'She learned her grandmother''s language at forty and understood, for the first time, why she had always dreamed in rhythms she could not name.',
-    'The tree fell in the storm. Its roots were wider than the canopy had been. No one knew until it was lying on its side.'
+    'Where have you seen this pattern before?',
+    'What structure repeats across situations?',
+    'How is this pattern showing up again?'
   ],
-  'glyphs/roots.bmp'
+  'glyphs/pattern.bmp'
 ),
-
--- 15. TIDE
 (
-  'tide',
-  array['Tide', 'Ebb', 'Flow'],
-  array['change', 'patience', 'inevitability', 'rhythm', 'surrender'],
+  'house',
+  array['shelter', 'belonging', 'security', 'stability', 'familiarity', 'grounding'],
   array[
-    'A change that is coming whether you prepare or not',
-    'The rhythm of things beyond your control',
-    'Knowing when to push and when to wait',
-    'The slow revealing of what was always there',
-    'Energy that withdraws before it returns stronger',
-    'Trust in a process that has its own timing',
-    'Something you lost that the current may bring back'
+    'A space provides protection and containment',
+    'Belonging is shaped by where one returns or rests',
+    'Stability is created through familiarity and structure',
+    'Environment influences how safe or settled something feels'
   ],
   array[
-    'The fisherman said: you do not argue with the tide. You learn its schedule and call it partnership.',
-    'She stopped chasing the promotion and it arrived. She was not sure if she had been blocking it or if the timing was just the timing.'
+    'Where does this feel settled or grounded?',
+    'What environment creates a sense of stability?',
+    'Where do you return to?'
   ],
-  'glyphs/tide.bmp'
+  'glyphs/house.bmp'
 ),
-
--- 16. VEIL
 (
-  'veil',
-  array['Veil', 'Gauze', 'Obscured'],
-  array['mystery', 'protection', 'illusion', 'softness', 'boundary'],
+  'bond',
+  array['linkage', 'attachment', 'continuity', 'connection', 'dependence'],
   array[
-    'Something you can almost see but not quite',
-    'A truth softened by distance or time',
-    'The protective layer between you and something overwhelming',
-    'A secret that serves a purpose',
-    'The gentleness of not knowing everything',
-    'A memory that has become more feeling than fact',
-    'The privacy you owe yourself',
-    'Something revealed gradually rather than all at once'
+    'Two or more elements are directly linked',
+    'Strength depends on the integrity of each connection point',
+    'Attachment creates continuity across separation',
+    'Connection may both support and restrict'
   ],
   array[
-    'The fog that morning was so thick that the familiar street became a new country. She walked to work and arrived somewhere else entirely.',
-    'He told the story so many times that the pain wore smooth, like sea glass. The sharp thing became beautiful and no longer cut.'
+    'What is linking these parts together?',
+    'Where is connection creating continuity?',
+    'How are parts held in relation?'
   ],
-  'glyphs/veil.bmp'
+  'glyphs/bond.bmp'
 ),
-
--- 17. CANYON
 (
-  'canyon',
-  array['Canyon', 'Chasm', 'Depth'],
-  array['distance', 'erosion', 'time', 'perspective', 'vastness'],
+  'detachment',
+  array['separation', 'survival', 'adaptation', 'release', 'resilience'],
   array[
-    'A gap that formed slowly without anyone noticing',
-    'The distance between intention and impact',
-    'Something carved by persistence, not force',
-    'The awe of looking back at how far you have come',
-    'A divide that seems impossible to cross',
-    'The beauty that only exists because something was removed',
-    'Depth earned through sustained pressure',
-    'The echo of your own voice coming back changed'
+    'Separation occurs to preserve the larger whole',
+    'Something is released as a form of protection',
+    'Loss and continuation exist at the same time',
+    'Adaptation allows movement after disruption'
   ],
   array[
-    'The geologist pointed at the canyon wall and said: this layer is a million years of nothing happening. Sometimes nothing is the most important thing.',
-    'They stood on opposite rims and waved. It looked like they were close. The hike between them took two days.'
+    'What is being separated in order to continue?',
+    'Where is something being let go?',
+    'How is adaptation occurring through release?'
   ],
-  'glyphs/canyon.bmp'
+  'glyphs/detachment.bmp'
 ),
-
--- 18. BLOOM
 (
-  'bloom',
-  array['Bloom', 'Blossom', 'Opening'],
-  array['emergence', 'beauty', 'timing', 'expression', 'vulnerability'],
+  'unity',
+  array['togetherness', 'cooperation', 'alignment', 'group', 'support'],
   array[
-    'Something finally ready to show itself',
-    'A talent or quality emerging at the right moment',
-    'The courage of being fully visible',
-    'Beauty that requires vulnerability',
-    'A season of abundance after a long winter',
-    'The brief window when everything aligns',
-    'Letting yourself be seen as you actually are',
-    'An effort that is finally bearing fruit'
+    'Multiple individuals act in coordination',
+    'Shared movement creates collective strength',
+    'Alignment exists across a group rather than an individual',
+    'Support is mutual rather than one-directional'
   ],
   array[
-    'The night-blooming cereus opens for one night a year. The neighbors set alarms and bring chairs. Some things are worth staying up for.',
-    'She published the poem twenty years after writing it. It was not that she was not ready. The world was not ready.'
+    'Where are you moving in sync with others?',
+    'Where are things moving together?',
+    'What is shared across this group?'
   ],
-  'glyphs/bloom.bmp'
+  'glyphs/unity.bmp'
 ),
-
--- 19. LATTICE
 (
-  'lattice',
-  array['Lattice', 'Grid', 'Framework'],
-  array['structure', 'pattern', 'support', 'interconnection', 'order'],
+  'cycles',
+  array['rhythm', 'flow', 'repetition', 'change', 'movement', 'continuity'],
   array[
-    'A structure that supports without constraining',
-    'The invisible frameworks that shape your days',
-    'Finding order in apparent chaos',
-    'The web of relationships that holds you up',
-    'A system you built that now runs without you',
-    'The comfort of routine and the cost of it',
-    'Interdependence that makes everyone stronger',
-    'A pattern you can only see from a distance'
+    'Movement rises and falls in repeating patterns',
+    'Change occurs in phases rather than all at once',
+    'Momentum builds, recedes, and returns again',
+    'Stability exists within ongoing motion'
   ],
   array[
-    'The vine needed the trellis and the trellis needed the vine. Without one, the other was just sticks or just a mess on the ground.',
-    'He mapped his week and realized every free hour was actually committed — to habits so old they had become invisible.'
+    'How does this move in cycles rather than in a straight line?',
+    'Where does this rise and fall over time?',
+    'What repeats in phases?'
   ],
-  'glyphs/lattice.bmp'
+  'glyphs/cycles.bmp'
 ),
-
--- 20. ECHO
 (
-  'echo',
-  array['Echo', 'Reverberation', 'Return'],
-  array['repetition', 'memory', 'consequence', 'resonance', 'past'],
+  'interconnection',
+  array['network', 'system', 'linkage', 'sensitivity', 'structure'],
   array[
-    'A past action whose consequences are still arriving',
-    'Something someone said that you keep hearing',
-    'A pattern from your past showing up in the present',
-    'The way your influence ripples through others',
-    'A memory triggered by something small and unexpected',
-    'Hearing your parent''s voice come out of your own mouth',
-    'The delayed impact of a kind act',
-    'Something you said that meant more than you knew'
+    'Multiple elements are connected across a wider system',
+    'Change in one area affects others',
+    'Connections extend beyond direct links',
+    'The structure responds as a whole'
   ],
   array[
-    'Ten years later, the student emailed to say: that one thing you said in October changed everything. The teacher did not remember saying it.',
-    'She heard the song in a taxi in a foreign city and was instantly eight years old, standing in the kitchen, watching her father cook.'
+    'How does this connect across a larger system?',
+    'Where do small changes affect the whole?',
+    'What links these parts beyond direct contact?'
   ],
-  'glyphs/echo.bmp'
+  'glyphs/interconnection.bmp'
 ),
-
--- 21. DRIFT
 (
-  'drift',
-  array['Drift', 'Wander', 'Float'],
-  array['uncertainty', 'freedom', 'aimless', 'exploration', 'surrender'],
+  'opening',
+  array['openness', 'possibility', 'perspective', 'access', 'ventilation', 'invitation'],
   array[
-    'Moving without a clear destination',
-    'The productive value of not having a plan',
-    'A relationship slowly changing without anyone deciding',
-    'The space between finishing one thing and starting another',
-    'Letting your mind follow its own current',
-    'The gentle terror of having no obligations',
-    'Discovering something by accident',
-    'The difference between being lost and exploring'
+    'A boundary is partially removed, allowing exchange between inside and outside',
+    'New perspectives become available through exposure',
+    'Movement of air, light, or ideas is enabled',
+    'There is access to something previously closed or unseen'
   ],
   array[
-    'He took the wrong train on purpose. Three stops later he found the bookshop that had the one book he did not know he needed.',
-    'After the project ended, she spent two weeks doing nothing. On day fifteen, the next idea arrived fully formed.',
-    'The balloon released at the birthday party was found four states away. The child who found it wrote back.'
+    'What becomes available through this opening?',
+    'Where is access being created?',
+    'What is now able to enter or leave?'
   ],
-  'glyphs/drift.bmp'
+  'glyphs/opening.bmp'
 ),
-
--- 22. KEYSTONE
 (
-  'keystone',
-  array['Keystone', 'Linchpin', 'Capstone'],
-  array['essential', 'responsibility', 'completion', 'load-bearing', 'crucial'],
+  'ripple',
+  array['impact', 'spread', 'influence', 'cause-effect', 'disturbance', 'propagation'],
   array[
-    'The one thing that holds everything else together',
-    'A person without whom the whole structure shifts',
-    'The final piece that completes an understanding',
-    'A small element carrying disproportionate weight',
-    'The habit or practice that makes all other habits possible',
-    'Recognizing your own importance in a system',
-    'The risk of removing something that seems small',
-    'A responsibility you did not ask for but cannot set down'
+    'A single action creates outward movement beyond its origin',
+    'Change spreads gradually across a wider field',
+    'Small disturbances can extend farther than expected',
+    'Effects continue even after the initial moment has passed'
   ],
   array[
-    'When she left the team, six other things broke. No one had realized she was the reason they worked.',
-    'The mason pointed to the small stone at the top of the arch and said: every other stone is trying to fall. That one is the reason they don''t.',
-    'He stopped making coffee in the morning and within a week his entire routine had collapsed. It was never about the coffee.'
+    'How far does this extend beyond its starting point?',
+    'How far does this extend from its origin?',
+    'Where are effects spreading outward?'
   ],
-  'glyphs/keystone.bmp'
-)
-on conflict (id) do nothing;
+  'glyphs/ripple.bmp'
+),
+(
+  'dialogue',
+  array['communication', 'exchange', 'listening', 'expression', 'interaction', 'conversation'],
+  array[
+    'Information moves between two or more points',
+    'Meaning is shaped through both speaking and listening',
+    'Exchange creates mutual influence rather than one-way direction',
+    'Understanding develops through interaction over time'
+  ],
+  array[
+    'How are you expressing this to others?',
+    'What is being exchanged in this interaction?',
+    'Where is communication shaping understanding?'
+  ],
+  'glyphs/dialogue.bmp'
+),
+(
+  'progression',
+  array['steps', 'ascent', 'movement', 'growth', 'advancement', 'sequence'],
+  array[
+    'Movement occurs in defined steps rather than all at once',
+    'Progress builds incrementally over time',
+    'Each level depends on the one before it',
+    'Advancement requires continued upward or forward motion'
+  ],
+  array[
+    'What step comes next from where you are?',
+    'What step comes next from here?',
+    'Where is movement happening in stages?'
+  ],
+  'glyphs/progression.bmp'
+);
