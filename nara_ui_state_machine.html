@@ -320,21 +320,82 @@
         padding-top: 6px;
       }
 
+      .screen-screen.is-minimal {
+        grid-template-rows: 1fr;
+        gap: 0;
+      }
+
+      .screen-screen.is-minimal .screen-head,
+      .screen-screen.is-minimal .screen-footer {
+        display: none;
+      }
+
+      .screen-screen.is-minimal .screen-body {
+        height: 100%;
+        min-height: 100%;
+        position: relative;
+      }
+
       .footer-meta {
         font-size: 10px;
       }
 
-      .plus-screen {
+      .idle-screen {
+        position: relative;
         height: 100%;
-        display: grid;
-        place-items: center;
-        padding-bottom: 12px;
+        width: 100%;
       }
 
-      .plus-mark {
-        font-family: "PP Mondwest", ui-serif, serif;
-        font-size: 102px;
-        line-height: 0.8;
+      .idle-circle {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+      }
+
+      .idle-star {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        width: 17px;
+        height: 17px;
+      }
+
+      .idle-star::before,
+      .idle-star::after,
+      .idle-star span::before,
+      .idle-star span::after {
+        content: "";
+        position: absolute;
+        background: var(--ink);
+      }
+
+      .idle-star::before {
+        left: 7px;
+        top: 0;
+        width: 3px;
+        height: 17px;
+      }
+
+      .idle-star::after {
+        left: 0;
+        top: 7px;
+        width: 17px;
+        height: 3px;
+      }
+
+      .idle-star span::before {
+        left: 4px;
+        top: 4px;
+        width: 9px;
+        height: 9px;
+      }
+
+      .idle-star span::after {
+        display: none;
       }
 
       .center-stack {
@@ -352,6 +413,40 @@
         max-width: 16ch;
       }
 
+      .startup-screen {
+        position: relative;
+        height: 100%;
+        min-height: 220px;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .startup-logo {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 138px;
+        height: 62px;
+        transform: translate(-50%, -50%);
+        background: no-repeat center / contain url("public/nara/logomark.svg");
+        z-index: 2;
+      }
+
+      .startup-sparkles {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: block;
+      }
+
+      .startup-sparkles .sparkle {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        background: var(--ink);
+        display: block;
+      }
+
       .record-ring,
       .status-dot {
         width: 18px;
@@ -363,6 +458,74 @@
       .record-ring.is-live {
         background: var(--ink);
         animation: pulse 0.9s steps(2, end) infinite;
+      }
+
+      .listening-screen {
+        position: relative;
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+
+      .listening-glyph {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+
+      .listening-glyph img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        image-rendering: pixelated;
+        filter: grayscale(1) contrast(1.15);
+      }
+
+      .processing-screen {
+        position: relative;
+        height: 100%;
+        width: 100%;
+      }
+
+      .processing-sparkle {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        background: var(--ink);
+      }
+
+      .menu-screen {
+        position: relative;
+        height: 100%;
+        width: 100%;
+        display: grid;
+        place-items: center;
+      }
+
+      .menu-stack {
+        width: 116px;
+        display: grid;
+        text-align: center;
+        transform: translateY(18px);
+      }
+
+      .menu-item {
+        font-size: 20px;
+        line-height: 1.1;
+        font-weight: 400;
+        padding: 8px 0;
+      }
+
+      .menu-item.is-active {
+        font-weight: 700;
+      }
+
+      .menu-divider {
+        height: 1px;
+        background: var(--ink);
+        width: 100%;
       }
 
       @keyframes pulse {
@@ -527,8 +690,7 @@
       .lexicon-ring {
         position: relative;
         width: 100%;
-        height: 166px;
-        overflow: hidden;
+        height: 100%;
       }
 
       .lexicon-glyph {
@@ -538,17 +700,9 @@
         transform: translate(-50%, -50%);
         transition:
           left 180ms steps(8, end),
-          top 180ms steps(8, end),
           width 180ms steps(8, end),
           height 180ms steps(8, end),
-          opacity 180ms steps(8, end),
-          border-width 180ms steps(8, end);
-        border: 1px solid var(--ink);
-        background: var(--bg);
-      }
-
-      .lexicon-glyph.is-center {
-        border-width: 2px;
+          opacity 180ms steps(8, end);
       }
 
       .lexicon-glyph img {
@@ -557,6 +711,12 @@
         object-fit: contain;
         image-rendering: pixelated;
         filter: grayscale(1) contrast(1.25);
+      }
+
+      .lexicon-screen {
+        position: relative;
+        height: 100%;
+        width: 100%;
       }
 
       .status-rail {
@@ -609,23 +769,23 @@
         <div class="panel-body">
           <section class="intro">
             <h1>Nara device flow prototype</h1>
-            <p>HTML-first state machine preview for idle, recording, processing, output, menu, history, settings, and detail states.</p>
+            <p>HTML-first state machine preview for the new Nara flow: logo, idle, listening, processing, gallery output, menu, lexicon, history, settings, and detail.</p>
           </section>
 
           <section class="section">
             <div class="section-title">Hardware Inputs</div>
             <div class="controls-grid">
-              <button id="recordButton" class="control-button" type="button">
-                <span class="control-label">Record Button</span>
-                <span class="control-copy">Hold to record</span>
+              <button id="primaryButton" class="control-button" type="button">
+                <span class="control-label">Button 1</span>
+                <span class="control-copy">Record / confirm</span>
               </button>
-              <button id="selectButton" class="control-button" type="button">
-                <span class="control-label">Select Button</span>
-                <span class="control-copy">Confirm / enter</span>
+              <button id="secondaryButton" class="control-button" type="button">
+                <span class="control-label">Button 2</span>
+                <span class="control-copy">Cancel / back</span>
               </button>
-              <button id="backButton" class="control-button" type="button">
-                <span class="control-label">Back Button</span>
-                <span class="control-copy">Back / cancel</span>
+              <button id="menuButton" class="control-button" type="button">
+                <span class="control-label">Button 3</span>
+                <span class="control-copy">Menu</span>
               </button>
             </div>
           </section>
@@ -649,15 +809,22 @@
           <section class="section">
             <div class="section-title">Keyboard Mapping</div>
             <div class="keys">
-              <div class="chip"><span class="nav-key">R</span> hold record</div>
-              <div class="chip"><span class="nav-key">Enter</span> select</div>
-              <div class="chip"><span class="nav-key">Backspace</span> back</div>
+              <div class="chip"><span class="nav-key">R</span> hold / release button 1</div>
+              <div class="chip"><span class="nav-key">Enter</span> tap button 1</div>
+              <div class="chip"><span class="nav-key">Backspace</span> button 2</div>
+              <div class="chip"><span class="nav-key">M</span> button 3</div>
+              <div class="chip"><span class="nav-key">S</span> replay startup</div>
+              <div class="chip"><span class="nav-key">D</span> show startup dots</div>
               <div class="chip"><span class="nav-key">← / →</span> rotate</div>
             </div>
           </section>
 
           <section class="section">
             <div class="section-title">Transition Notes</div>
+            <div class="keys">
+              <button id="replayStartupButton" type="button">Replay Startup</button>
+              <button id="showDotsButton" type="button">Show Startup Dots</button>
+            </div>
             <div id="transitionLog" class="list"></div>
           </section>
         </div>
@@ -668,7 +835,7 @@
           <div class="device-meta">
             <div>
               <h2>Nara</h2>
-              <p>single active screen, button + dial navigation</p>
+            <p>three-button flow with dial navigation inside menus and galleries</p>
             </div>
           </div>
           <div class="status-rail" id="statusRail"></div>
@@ -804,6 +971,43 @@
         { glyphs: ["ripple", "conflict", "harmony"], word: "reframing", detailIndex: 2 },
       ];
 
+      const listeningFrames = [
+        "public/ui/UI-000-Action.png",
+        "public/ui/UI-000-Action-1.png",
+        "public/ui/UI-000-Action-2.png",
+      ];
+
+      const processingFrames = [
+        [
+          [42, 38], [68, 52], [126, 44], [178, 58], [194, 86], [154, 96], [98, 104], [62, 126],
+          [140, 132], [184, 142], [112, 154], [74, 170], [164, 178], [52, 188],
+        ],
+        [
+          [56, 42], [88, 48], [146, 54], [186, 72], [164, 92], [116, 98], [74, 112], [48, 138],
+          [136, 146], [178, 154], [96, 166], [62, 182], [154, 188], [122, 74],
+        ],
+        [
+          [48, 54], [78, 40], [132, 50], [170, 64], [192, 96], [146, 108], [94, 116], [58, 136],
+          [124, 144], [170, 166], [108, 178], [72, 190], [156, 196], [118, 84],
+        ],
+      ];
+
+      const startupTargets = [
+        [44, 64], [50, 70], [56, 76], [62, 82], [68, 88], [74, 94], [80, 100],
+        [44, 78], [50, 84], [56, 90], [62, 96], [68, 102], [74, 108],
+        [56, 60], [62, 66], [68, 72], [74, 78], [80, 84], [86, 90], [92, 96],
+        [92, 64], [98, 70], [104, 76], [110, 82], [116, 88], [122, 94],
+        [104, 60], [110, 66], [116, 72], [122, 78], [128, 84], [134, 90],
+        [130, 64], [136, 70], [142, 76], [148, 82], [154, 88], [160, 94],
+        [142, 60], [148, 66], [154, 72], [160, 78], [166, 84], [172, 90],
+        [64, 114], [72, 114], [80, 114], [88, 114], [96, 114], [104, 114],
+        [112, 114], [120, 114], [128, 114], [136, 114], [144, 114], [152, 114],
+      ];
+
+      const STARTUP_MOVE_STEPS = 18;
+      const STARTUP_FRAME_MS = 260;
+      const STARTUP_LOGO_HOLD_MS = 3000;
+
       const app = {
         currentState: UIState.UI_1,
         previousState: UIState.UI_0,
@@ -811,16 +1015,22 @@
         currentOutput: sampleOutputs[0],
         history: [sampleOutputs[1], sampleOutputs[2], sampleOutputs[0]],
         outputFocusIndex: 0,
-        outputMenuArmed: false,
         menuIndex: 0,
         historyIndex: 0,
         settingsIndex: 0,
         detailGlyphIndex: 0,
         lexiconIndex: 0,
-        idleDialPosition: 0,
         potentiometer: 0,
         processTimer: null,
         splashTimer: null,
+        splashLogoTimer: null,
+        listeningTimer: null,
+        processingTimer: null,
+        listeningFrameIndex: 0,
+        processingFrameIndex: 0,
+        startupFrameIndex: 0,
+        startupStep: 0,
+        startupShowLogo: false,
         sampleCursor: 0,
         transitionNotes: [],
         settings: {
@@ -836,17 +1046,25 @@
       const transitionLog = document.getElementById("transitionLog");
       const potentiometer = document.getElementById("potentiometer");
       const potValue = document.getElementById("potValue");
-      const recordButton = document.getElementById("recordButton");
-      const selectButton = document.getElementById("selectButton");
-      const backButton = document.getElementById("backButton");
+      const primaryButton = document.getElementById("primaryButton");
+      const secondaryButton = document.getElementById("secondaryButton");
+      const menuButton = document.getElementById("menuButton");
+      const replayStartupButton = document.getElementById("replayStartupButton");
+      const showDotsButton = document.getElementById("showDotsButton");
       const potLeftButton = document.getElementById("potLeftButton");
       const potRightButton = document.getElementById("potRightButton");
 
       function clearTimers() {
         window.clearTimeout(app.processTimer);
-        window.clearTimeout(app.splashTimer);
+        window.clearInterval(app.splashTimer);
+        window.clearTimeout(app.splashLogoTimer);
+        window.clearInterval(app.listeningTimer);
+        window.clearInterval(app.processingTimer);
         app.processTimer = null;
         app.splashTimer = null;
+        app.splashLogoTimer = null;
+        app.listeningTimer = null;
+        app.processingTimer = null;
       }
 
       function pushTransition(note) {
@@ -865,19 +1083,65 @@
       }
 
       function startSplash() {
+        app.startupFrameIndex = 0;
+        app.startupStep = 0;
+        app.startupShowLogo = false;
         setState(UIState.UI_1, "boot splash");
-        app.splashTimer = window.setTimeout(() => {
-          setState(UIState.UI_0, "splash complete");
-        }, 1200);
+        app.splashTimer = window.setInterval(() => {
+          if (app.currentState !== UIState.UI_1) {
+            return;
+          }
+          app.startupStep += 1;
+          if (app.startupStep >= STARTUP_MOVE_STEPS) {
+            app.startupStep = STARTUP_MOVE_STEPS;
+            app.startupShowLogo = true;
+            window.clearInterval(app.splashTimer);
+            app.splashTimer = null;
+            render();
+            app.splashLogoTimer = window.setTimeout(() => {
+              setState(UIState.UI_0, "splash complete");
+            }, STARTUP_LOGO_HOLD_MS);
+            return;
+          }
+          render();
+        }, STARTUP_FRAME_MS);
+      }
+
+      function showStartupDots() {
+        clearTimers();
+        app.currentState = UIState.UI_1;
+        app.startupFrameIndex = 0;
+        app.startupStep = STARTUP_MOVE_STEPS;
+        app.startupShowLogo = false;
+        pushTransition("UI_1 - startup dots preview");
+        render();
+      }
+
+      function startListeningLoop() {
+        app.listeningFrameIndex = 0;
+        app.listeningTimer = window.setInterval(() => {
+          if (app.currentState !== UIState.UI_2) {
+            return;
+          }
+          app.listeningFrameIndex = (app.listeningFrameIndex + 1) % listeningFrames.length;
+          render();
+        }, 720);
       }
 
       function startProcessing() {
         setState(UIState.UI_3, "recording released");
+        app.processingFrameIndex = 0;
+        app.processingTimer = window.setInterval(() => {
+          if (app.currentState !== UIState.UI_3) {
+            return;
+          }
+          app.processingFrameIndex = (app.processingFrameIndex + 1) % processingFrames.length;
+          render();
+        }, 760);
         app.processTimer = window.setTimeout(() => {
           app.currentOutput = sampleOutputs[app.sampleCursor % sampleOutputs.length];
           app.sampleCursor += 1;
           app.outputFocusIndex = 0;
-          app.outputMenuArmed = false;
           app.detailGlyphIndex = app.currentOutput.detailIndex || 0;
           app.history.unshift(app.currentOutput);
           app.history = app.history.slice(0, 8);
@@ -912,39 +1176,25 @@
         potValue.textContent = String(app.potentiometer);
       }
 
-      function handleRecordPress() {
-        // UI_0 is the only valid entry point for capture.
+      function handlePrimaryPress() {
         if (app.currentState === UIState.UI_0) {
-          setState(UIState.UI_2, "record button held");
+          setState(UIState.UI_2, "button 1 held");
+          startListeningLoop();
         }
       }
 
-      function handleRecordRelease() {
-        // Releasing the hold ends recording and immediately enters processing.
+      function handlePrimaryRelease() {
         if (app.currentState === UIState.UI_2) {
           startProcessing();
         }
       }
 
-      function handleSelect() {
+      function handlePrimaryTap() {
         switch (app.currentState) {
-          case UIState.UI_0:
-            if (app.idleDialPosition === 1) {
-              app.menuIndex = 0;
-              app.returnState = UIState.UI_0;
-              setState(UIState.UI_MENU, "idle menu open");
-            }
-            break;
           case UIState.UI_4:
-            if (app.outputMenuArmed) {
-              app.menuIndex = 0;
-              app.returnState = UIState.UI_4;
-              setState(UIState.UI_MENU, "output menu open");
-            } else {
-              app.detailGlyphIndex = app.outputFocusIndex;
-              app.returnState = UIState.UI_4;
-              setState(UIState.UI_5a, "selected glyph detail");
-            }
+            app.detailGlyphIndex = app.outputFocusIndex;
+            app.returnState = UIState.UI_4;
+            setState(UIState.UI_5a, "output glyph opened");
             break;
           case UIState.UI_MENU:
             if (menuOptions[app.menuIndex] === "Lexicon") {
@@ -957,13 +1207,12 @@
             }
             break;
           case UIState.UI_3a:
-            pushTransition("UI_3a - select ignored");
+            pushTransition("UI_3a - button 1 ignored");
             render();
             break;
           case UIState.UI_3b:
             app.currentOutput = app.history[app.historyIndex];
             app.outputFocusIndex = 0;
-            app.outputMenuArmed = false;
             app.returnState = UIState.UI_3b;
             setState(UIState.UI_4, "history item opened");
             break;
@@ -982,7 +1231,7 @@
         }
       }
 
-      function handleBack() {
+      function handleSecondary() {
         switch (app.currentState) {
           case UIState.UI_2:
             setState(UIState.UI_0, "recording cancelled");
@@ -1009,23 +1258,31 @@
         }
       }
 
-      function handlePotentiometer(delta) {
+      function handleMenu() {
         switch (app.currentState) {
           case UIState.UI_0:
-            app.idleDialPosition = clampWrap(app.idleDialPosition + delta, 2);
-            break;
           case UIState.UI_4:
-            // Output cycles across three glyphs; every fourth detent arms menu access.
-            {
-              const basis = app.outputMenuArmed ? 3 : app.outputFocusIndex;
-              const nextIndex = clampWrap(basis + delta, 4);
-              if (nextIndex === 3) {
-                app.outputMenuArmed = true;
-              } else {
-                app.outputMenuArmed = false;
-                app.outputFocusIndex = nextIndex;
-              }
-            }
+            app.menuIndex = 0;
+            app.returnState = app.currentState;
+            setState(UIState.UI_MENU, "menu opened");
+            break;
+          case UIState.UI_MENU:
+            setState(app.returnState, "menu closed");
+            break;
+          case UIState.UI_3a:
+          case UIState.UI_3b:
+          case UIState.UI_3c:
+            setState(UIState.UI_MENU, "menu returned");
+            break;
+          default:
+            break;
+        }
+      }
+
+      function handlePotentiometer(delta) {
+        switch (app.currentState) {
+          case UIState.UI_4:
+            app.outputFocusIndex = clampWrap(app.outputFocusIndex + delta, app.currentOutput.glyphs.length);
             break;
           case UIState.UI_MENU:
             app.menuIndex = clampWrap(app.menuIndex + delta, menuOptions.length);
@@ -1077,44 +1334,69 @@
         `;
       }
 
+      function renderMinimal(body) {
+        return `<div class="screen-body">${body}</div>`;
+      }
+
       function renderIdle() {
         const body = `
-          <div class="plus-screen">
-            <div class="plus-mark">+</div>
+          <div class="idle-screen">
+            <div class="idle-circle" aria-hidden="true"></div>
+            <div class="idle-star" aria-hidden="true"><span></span></div>
           </div>
         `;
-        const footerLeft = app.idleDialPosition === 1 ? "◉ Menu armed" : "◯ Hold record";
-        return renderFrame("Idle", "UI_0", body, footerLeft, "Select to menu");
+        return renderMinimal(body);
       }
 
       function renderSplash() {
+        const progress = app.startupStep / STARTUP_MOVE_STEPS;
+        const sparkles = app.startupShowLogo
+          ? ""
+          : startupTargets.map(([left, top], index) => {
+              const finalLeft = left + 22;
+              const finalTop = top + 14;
+              const startLeft = 244 + ((index % 8) * 12);
+              const startTop = 18 + ((index * 17) % 152);
+              const currentLeft = startLeft + ((finalLeft - startLeft) * progress);
+              const currentTop = startTop + ((finalTop - startTop) * progress);
+              return (
+                `<div class="sparkle" style="left:${currentLeft.toFixed(1)}px; top:${currentTop.toFixed(1)}px;"></div>`
+              );
+            }).join("");
+
         const body = `
-          <div class="center-stack">
-            <div class="mark" style="width: 138px; height: 62px;"></div>
-            <div class="center-copy">Palm-sized digital oracle for reflection.</div>
+          <div class="startup-screen">
+            ${!app.startupShowLogo ? `<div class="startup-sparkles" aria-hidden="true">${sparkles}</div>` : ""}
+            ${app.startupShowLogo ? `<div class="startup-logo" aria-hidden="true"></div>` : ""}
           </div>
         `;
-        return renderFrame("Nara", "UI_1", body, "boot", "auto");
+        return renderMinimal(body);
       }
 
       function renderListening() {
+        const listeningFrame = listeningFrames[app.listeningFrameIndex % listeningFrames.length];
         const body = `
-          <div class="center-stack">
-            <div class="record-ring is-live" aria-hidden="true"></div>
-            <div class="center-copy">Listening. Release the record button to end capture.</div>
+          <div class="listening-screen">
+            <div class="listening-glyph" aria-hidden="true">
+              <img src="${listeningFrame}" alt="" />
+            </div>
           </div>
         `;
-        return renderFrame("Listening", "UI_2", body, "hold active", "back cancels");
+        return renderMinimal(body);
       }
 
       function renderProcessing() {
+        const sparkles = processingFrames[app.processingFrameIndex % processingFrames.length]
+          .map(([left, top]) => `<div class="processing-sparkle" style="left:${left}px; top:${top}px;"></div>`)
+          .join("");
         const body = `
-          <div class="center-stack">
-            <div class="thinking">Processing</div>
-            <div class="center-copy">Speech to context, context to glyphs, glyphs to word.</div>
+          <div class="processing-screen">
+            <div class="idle-circle" aria-hidden="true"></div>
+            <div class="idle-star" aria-hidden="true"><span></span></div>
+            ${sparkles}
           </div>
         `;
-        return renderFrame("Processing", "UI_3", body, "working", "auto to output");
+        return renderMinimal(body);
       }
 
       function renderOutput() {
@@ -1134,71 +1416,48 @@
             ${cards}
           </div>
         `;
-
-        const footerLeft = app.outputMenuArmed
-          ? "Menu armed"
-          : `Glyph ${app.outputFocusIndex + 1} selected`;
-        return renderFrame("", "UI_4", body, footerLeft, "Back to idle");
+        return renderFrame("", "UI_4", body, `Glyph ${app.outputFocusIndex + 1} selected`, "B1 open  B2 idle  B3 menu");
       }
 
       function renderMenu() {
         const body = `
-          <div class="list">
-            ${menuOptions.map((item, index) => `
-              <div class="list-row ${index === app.menuIndex ? "is-active" : ""}">
-                <div class="list-label">${item}</div>
-                <div class="list-copy">${
-                  item === "Lexicon"
-                    ? "Ring carousel of all glyphs"
-                    : item === "History"
-                      ? "Past outputs"
-                      : "System toggles"
-                }</div>
-              </div>
-            `).join("")}
+          <div class="menu-screen">
+            <div class="idle-circle" aria-hidden="true"></div>
+            <div class="idle-star" aria-hidden="true"><span></span></div>
+            <div class="menu-stack">
+              ${menuOptions.map((item, index) => `
+                <div class="menu-item ${index === app.menuIndex ? "is-active" : ""}">${item}</div>
+                ${index < menuOptions.length - 1 ? `<div class="menu-divider" aria-hidden="true"></div>` : ""}
+              `).join("")}
+            </div>
           </div>
         `;
-        return renderFrame("Menu", "UI_MENU", body, "Rotate to choose", "Back returns");
+        return renderMinimal(body);
       }
 
       function renderLexicon() {
-        const visibleCount = Math.min(22, lexiconGlyphIds.length);
-        const centerX = 110;
-        const centerY = 84;
-        const radiusX = 74;
-        const radiusY = 56;
-        const beforeCenter = Math.floor((visibleCount - 1) / 2);
-        const afterCenter = visibleCount - 1 - beforeCenter;
+        const offsets = [-3, -2, -1, 0, 1, 2];
+        const positions = [
+          { x: 22, size: 18, opacity: 0.55 },
+          { x: 52, size: 28, opacity: 0.72 },
+          { x: 84, size: 40, opacity: 0.88 },
+          { x: 118, size: 64, opacity: 1 },
+          { x: 156, size: 40, opacity: 0.88 },
+          { x: 188, size: 28, opacity: 0.72 },
+        ];
         const glyphs = [];
 
-        for (let offset = -beforeCenter; offset <= afterCenter; offset += 1) {
+        for (let index = 0; index < offsets.length; index += 1) {
+          const offset = offsets[index];
           const glyphIndex = clampWrap(app.lexiconIndex + offset, lexiconGlyphIds.length);
           const glyphId = lexiconGlyphIds[glyphIndex];
-          if (offset === 0) {
-            glyphs.push(`
-              <div
-                class="lexicon-glyph is-center"
-                style="left:${centerX}px; top:${centerY}px; width:76px; height:76px; z-index:30; opacity:1;"
-              >
-                ${glyphImage(glyphId, `${glyphId} centered glyph`)}
-              </div>
-            `);
-            continue;
-          }
-
-          const ringOffset = offset < 0 ? offset + beforeCenter + 1 : offset + beforeCenter;
-          const angle = ((ringOffset / (visibleCount - 1)) * Math.PI * 2) - Math.PI / 2;
-          const left = centerX + Math.cos(angle) * radiusX;
-          const top = centerY + Math.sin(angle) * radiusY;
-          const distance = Math.abs(offset);
-          const size = Math.max(20, 34 - distance);
-          const opacity = Math.max(0.28, 1 - distance * 0.08);
-          const zIndex = 20 - distance;
+          const position = positions[index];
+          const zIndex = 30 - Math.abs(offset);
 
           glyphs.push(`
             <div
               class="lexicon-glyph"
-              style="left:${left}px; top:${top}px; width:${size}px; height:${size}px; z-index:${zIndex}; opacity:${opacity};"
+              style="left:${position.x}px; top:108px; width:${position.size}px; height:${position.size}px; z-index:${zIndex}; opacity:${position.opacity};"
             >
               ${glyphImage(glyphId, `${glyphId} lexicon glyph`)}
             </div>
@@ -1206,11 +1465,15 @@
         }
 
         const body = `
-          <div class="lexicon-ring">
-            ${glyphs.join("")}
+          <div class="lexicon-screen">
+            <div class="idle-star" aria-hidden="true" style="left:10px; right:auto;"><span></span></div>
+            <div class="idle-circle" aria-hidden="true" style="left:auto; right:10px;"></div>
+            <div class="lexicon-ring">
+              ${glyphs.join("")}
+            </div>
           </div>
         `;
-        return renderFrame("Lexicon", "UI_3a", body, "Rotate ring", "Back to menu");
+        return renderMinimal(body);
       }
 
       function renderHistory() {
@@ -1227,7 +1490,7 @@
             `).join("")}
           </div>
         `;
-        return renderFrame("History", "UI_3b", body, "Select opens output", "Back to menu");
+        return renderFrame("History", "UI_3b", body, "B1 opens output", "B2 back  B3 menu");
       }
 
       function renderSettings() {
@@ -1241,7 +1504,7 @@
             `).join("")}
           </div>
         `;
-        return renderFrame("Settings", "UI_3c", body, "Select toggles", "Back to menu");
+        return renderFrame("Settings", "UI_3c", body, "B1 toggles", "B2 back  B3 menu");
       }
 
       function renderDetail() {
@@ -1253,7 +1516,7 @@
             </div>
           </div>
         `;
-        return renderFrame("Glyph", "UI_5a", body, "Rotate glyphs", "Back returns");
+        return renderFrame("Glyph", "UI_5a", body, "Rotate glyphs", "B1 close  B2 back");
       }
 
       function renderStatus() {
@@ -1313,20 +1576,27 @@
             break;
         }
         screenRoot.innerHTML = markup;
+        screenRoot.classList.toggle(
+          "is-minimal",
+          app.currentState === UIState.UI_0 || app.currentState === UIState.UI_1 || app.currentState === UIState.UI_2 || app.currentState === UIState.UI_3 || app.currentState === UIState.UI_MENU || app.currentState === UIState.UI_3a
+        );
         renderStatus();
         renderTransitions();
       }
 
-      recordButton.addEventListener("mousedown", handleRecordPress);
-      recordButton.addEventListener("mouseup", handleRecordRelease);
-      recordButton.addEventListener("mouseleave", handleRecordRelease);
-      recordButton.addEventListener("touchstart", (event) => {
+      primaryButton.addEventListener("mousedown", handlePrimaryPress);
+      primaryButton.addEventListener("mouseup", handlePrimaryRelease);
+      primaryButton.addEventListener("mouseleave", handlePrimaryRelease);
+      primaryButton.addEventListener("touchstart", (event) => {
         event.preventDefault();
-        handleRecordPress();
+        handlePrimaryPress();
       }, { passive: false });
-      recordButton.addEventListener("touchend", handleRecordRelease);
-      selectButton.addEventListener("click", handleSelect);
-      backButton.addEventListener("click", handleBack);
+      primaryButton.addEventListener("touchend", handlePrimaryRelease);
+      primaryButton.addEventListener("click", handlePrimaryTap);
+      secondaryButton.addEventListener("click", handleSecondary);
+      menuButton.addEventListener("click", handleMenu);
+      replayStartupButton.addEventListener("click", startSplash);
+      showDotsButton.addEventListener("click", showStartupDots);
       potLeftButton.addEventListener("click", () => rotatePot(-1));
       potRightButton.addEventListener("click", () => rotatePot(1));
       potentiometer.addEventListener("input", (event) => syncPotFromSlider(event.target.value));
@@ -1340,13 +1610,22 @@
 
         if (event.code === "KeyR") {
           event.preventDefault();
-          handleRecordPress();
+          handlePrimaryPress();
         } else if (event.code === "Enter") {
           event.preventDefault();
-          handleSelect();
+          handlePrimaryTap();
         } else if (event.code === "Backspace") {
           event.preventDefault();
-          handleBack();
+          handleSecondary();
+        } else if (event.code === "KeyM") {
+          event.preventDefault();
+          handleMenu();
+        } else if (event.code === "KeyS") {
+          event.preventDefault();
+          startSplash();
+        } else if (event.code === "KeyD") {
+          event.preventDefault();
+          showStartupDots();
         } else if (event.code === "ArrowLeft") {
           event.preventDefault();
           rotatePot(-1);
@@ -1360,7 +1639,7 @@
         pressedKeys.delete(event.code);
         if (event.code === "KeyR") {
           event.preventDefault();
-          handleRecordRelease();
+          handlePrimaryRelease();
         }
       });
 

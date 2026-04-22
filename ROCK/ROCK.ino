@@ -15,6 +15,7 @@
 #include "esp_heap_caps.h"
 #include "gallery_bitmaps.h"
 #include "consult_glyph_bitmaps.h"
+#include "listening_frames.h"
 #include "maddi_logo.h"
 #include "nara_logo.h"
 
@@ -33,6 +34,9 @@ void initYamnet();
 bool classifyAudioOnDevice();
 void startNaraUiTest();
 void processNaraUiTest();
+void startNaraUiCapturePipeline();
+void processNaraUiPipelineResult();
+void naraUiCapturePipelineTask(void* parameter);
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
 constexpr char DEFAULT_WIFI_SSID[] = "caroline";
@@ -54,12 +58,12 @@ constexpr char LEGACY_DEFAULT_SYSTEM_PROMPT[] =
 constexpr char PRIOR_DEFAULT_SYSTEM_PROMPT[] =
   "You are a guide to all questions of life. Respond only in emoticons.";
 
-constexpr int BUTTON_PIN = 2;
-constexpr int POT_PIN = 8;
+constexpr int BUTTON_PIN = 1;
+constexpr int POT_PIN = 3;
 constexpr int GALLERY_POT_PIN = 3;
 constexpr int ENCODER_CLK_PIN = GALLERY_POT_PIN;
-constexpr int ENCODER_DT_PIN = POT_PIN;
-constexpr int SELECT_BUTTON_PIN = 1;
+constexpr int ENCODER_DT_PIN = GALLERY_POT_PIN;
+constexpr int SELECT_BUTTON_PIN = 2;
 constexpr int BACK_BUTTON_PIN = 7;
 constexpr int NARA_UI_POT_PIN = GALLERY_POT_PIN;
 
@@ -113,6 +117,11 @@ constexpr uint32_t NARA_UI_SPLASH_MS = 5000;
 constexpr uint32_t NARA_UI_PROCESS_MS = 1600;
 constexpr unsigned long NARA_UI_POT_SETTLE_MS = 120;
 constexpr unsigned long ENCODER_DEBOUNCE_MS = 2;
+constexpr unsigned long NARA_UI_SPLASH_FRAME_MS = 140;
+constexpr unsigned long NARA_UI_SPLASH_HOLD_MS = 3000;
+constexpr uint8_t NARA_UI_SPLASH_MOVE_STEPS = 24;
+constexpr unsigned long NARA_UI_LISTENING_FRAME_MS = 720;
+constexpr unsigned long NARA_UI_PROCESSING_FRAME_MS = 760;
 
 constexpr uint32_t STATUS_PARTIAL_X = 0;
 constexpr uint32_t STATUS_PARTIAL_Y = 0;
@@ -333,10 +342,18 @@ String naraCurrentWord;
 String naraCurrentGlyphs[3];
 String naraUiTranscript;
 String naraUiProcessingStatus = "GLYPHS IN FLIGHT";
+String naraUiLastSpeechError;
 int32_t encoderPosition = 0;
 int encoderLastClkState = HIGH;
 unsigned long encoderLastEdgeMs = 0;
 int32_t naraUiLastEncoderPosition = 0;
+unsigned long naraUiLastAnimationTickMs = 0;
+TaskHandle_t naraUiCaptureTaskHandle = nullptr;
+bool naraUiCaptureTaskRunning = false;
+bool naraUiCaptureTaskCompleted = false;
+bool naraUiCaptureTaskSucceeded = false;
+String naraUiCaptureFailureTranscript;
+String naraUiCaptureFailureStatus;
 
 bool writeI2CRegister8(uint8_t address, uint8_t reg, uint8_t value);
 bool readI2CRegister8(uint8_t address, uint8_t reg, uint8_t& value);
@@ -508,23 +525,7 @@ int positiveModulo(int value, int modulus) {
 }
 
 void updateRotaryEncoder() {
-  const int clkState = digitalRead(ENCODER_CLK_PIN);
-  if (clkState == encoderLastClkState) return;
-
-  const unsigned long now = millis();
-  if (now - encoderLastEdgeMs < ENCODER_DEBOUNCE_MS) {
-    encoderLastClkState = clkState;
-    return;
-  }
-
-  encoderLastEdgeMs = now;
-  const int dtState = digitalRead(ENCODER_DT_PIN);
-  if (dtState != clkState) {
-    encoderPosition++;
-  } else {
-    encoderPosition--;
-  }
-  encoderLastClkState = clkState;
+  encoderPosition = analogRead(NARA_UI_POT_PIN);
 }
 
 int responseWordLimit() {
@@ -1000,7 +1001,7 @@ void initDisplay() {
   einkSpi.begin(EINK_CLK_PIN, -1, EINK_DIN_PIN, EINK_CS_PIN);
   display.epd2.selectSPI(einkSpi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
   display.init(115200, true, 2, false);
-  display.setRotation(0);
+  display.setRotation(2);
   display.setTextColor(GxEPD_BLACK);
   display.setFont(&FreeMonoBold9pt7b);
   displayReady = true;
@@ -1549,6 +1550,7 @@ bool recordMicrophoneForMs(uint32_t durationMs) {
 }
 
 String deepgramTranscribe() {
+  naraUiLastSpeechError = "";
   if (!ENABLE_NARA_UI_TEST) {
     updateScreen("TRANSCRIBING");
   }
@@ -1561,6 +1563,7 @@ String deepgramTranscribe() {
                "&smart_format=true&punctuate=true";
 
   if (!http.begin(client, url)) {
+    naraUiLastSpeechError = "Deepgram connect failed.";
     return "";
   }
 
@@ -1573,6 +1576,7 @@ String deepgramTranscribe() {
 
   if (code <= 0) {
     Serial.printf("[Deepgram] HTTP error %d\n", code);
+    naraUiLastSpeechError = "Deepgram network error.";
     return "";
   }
 
@@ -1580,6 +1584,7 @@ String deepgramTranscribe() {
   if (code < 200 || code >= 300) {
     Serial.println("[Deepgram] Response:");
     Serial.println(body);
+    naraUiLastSpeechError = String("Deepgram HTTP ") + code;
     return "";
   }
 
@@ -1587,10 +1592,14 @@ String deepgramTranscribe() {
   if (!extractDeepgramTranscript(body, transcript)) {
     Serial.println("[Deepgram] Transcript extraction failed");
     Serial.println(body);
+    naraUiLastSpeechError = "Transcript parse failed.";
     return "";
   }
 
   transcript.trim();
+  if (transcript.isEmpty()) {
+    naraUiLastSpeechError = "No speech recognized.";
+  }
   return transcript;
 }
 
@@ -2051,7 +2060,10 @@ void drawCenteredTextLine(const String& text, int16_t centerY) {
 
 uint8_t readNaraUiPotBucket(uint8_t bucketCount) {
   if (bucketCount <= 1) return 0;
-  return static_cast<uint8_t>(positiveModulo(static_cast<int>(encoderPosition), bucketCount));
+  const int raw = constrain(static_cast<int>(encoderPosition), 0, 4095);
+  int bucket = (raw * bucketCount) / 4096;
+  if (bucket >= bucketCount) bucket = bucketCount - 1;
+  return static_cast<uint8_t>(bucket);
 }
 
 bool readStableNaraUiPotBucket(uint8_t bucketCount, uint8_t& stableBucket) {
@@ -2128,9 +2140,77 @@ void drawNaraUiFooter(const char* left, const char* right) {
   }
 }
 
+void drawNaraUiCornerCircle(bool topLeft) {
+  const int16_t x = topLeft ? 8 : 174;
+  const int16_t y = 8;
+  display.drawCircle(x + 8, y + 8, 8, GxEPD_BLACK);
+}
+
+void drawNaraUiCornerCross(bool topLeft) {
+  const int16_t x = topLeft ? 10 : 176;
+  const int16_t y = 10;
+  display.fillRect(x + 6, y, 3, 17, GxEPD_BLACK);
+  display.fillRect(x, y + 6, 17, 3, GxEPD_BLACK);
+}
+
+void drawNaraUiMinimalMenuCorners() {
+  drawNaraUiCornerCircle(true);
+  drawNaraUiCornerCross(false);
+}
+
+void drawNaraUiMinimalLexiconCorners() {
+  drawNaraUiCornerCross(true);
+  drawNaraUiCornerCircle(false);
+}
+
+void drawNaraUiMinimalProcessingCorners() {
+  drawNaraUiCornerCircle(true);
+  drawNaraUiCornerCross(false);
+}
+
+void drawNaraUiPixelRing(int16_t centerX, int16_t centerY, int16_t ringSize, uint16_t pixelSize) {
+  static constexpr int8_t ringMap[][2] = {
+    {3, 0}, {4, 0}, {5, 0}, {6, 0},
+    {1, 1}, {2, 1}, {7, 1}, {8, 1},
+    {0, 3}, {0, 4}, {0, 5}, {0, 6},
+    {9, 3}, {9, 4}, {9, 5}, {9, 6},
+    {1, 7}, {2, 7}, {7, 7}, {8, 7},
+    {3, 8}, {4, 8}, {5, 8}, {6, 8},
+  };
+
+  const int16_t originX = centerX - ringSize / 2;
+  const int16_t originY = centerY - ringSize / 2;
+  for (const auto& point : ringMap) {
+    const int16_t px = originX + (point[0] * ringSize) / 10;
+    const int16_t py = originY + (point[1] * ringSize) / 10;
+    display.fillRect(px, py, pixelSize, pixelSize, GxEPD_BLACK);
+  }
+}
+
+uint8_t naraUiListeningFrame() {
+  return static_cast<uint8_t>(((millis() - naraUiStateStartedMs) / NARA_UI_LISTENING_FRAME_MS) % 3UL);
+}
+
+uint8_t naraUiProcessingFrame() {
+  return static_cast<uint8_t>(((millis() - naraUiStateStartedMs) / NARA_UI_PROCESSING_FRAME_MS) % 3UL);
+}
+
 void renderNaraUiIdle() {
-  display.setCursor(92, 118);
-  display.print("+");
+  display.drawBitmap(
+    0,
+    0,
+    NARA_UI_MAIN_SCREEN,
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
+}
+
+bool isNaraUiFailureStatus(const String& status) {
+  return status == "TRY AGAIN" ||
+         status == "WIFI FAIL" ||
+         status == "CONFIG" ||
+         status == "CONSULT FAIL";
 }
 
 void renderNaraUiSplash() {
@@ -2138,41 +2218,48 @@ void renderNaraUiSplash() {
 }
 
 void renderNaraUiListening() {
-  if (naraUiTranscript.length() > 0) {
-    drawWrappedText(naraUiTranscript, 16, 90, 168, 18, 4);
-    return;
-  }
-
-  drawCenteredTextLine("LISTENING", 96);
-  drawCenteredTextLine("RELEASE TO END", 126);
+  const uint8_t frame = naraUiListeningFrame();
+  display.drawBitmap(
+    0,
+    0,
+    NARA_LISTENING_FRAMES[frame],
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
 }
 
 void renderNaraUiProcessing() {
-  if (naraUiTranscript.length() > 0) {
-    drawWrappedText(naraUiTranscript, 16, 82, 168, 18, 4);
-    drawCenteredTextLine(naraUiProcessingStatus, 164);
+  if (isNaraUiFailureStatus(naraUiProcessingStatus)) {
+    drawNaraUiMinimalProcessingCorners();
+    display.setFont(&FreeMonoBold9pt7b);
+    drawCenteredTextLine(naraUiProcessingStatus, 68);
+    drawWrappedText(naraUiTranscript, 18, 102, 164, 18, 4);
     return;
   }
-
-  drawCenteredTextLine("PROCESSING", 96);
-  drawCenteredTextLine(naraUiProcessingStatus, 126);
+  const uint8_t frame = naraUiProcessingFrame();
+  display.drawBitmap(
+    0,
+    0,
+    NARA_PROCESSING_FRAMES[frame],
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
 }
 
 void renderNaraUiOutput() {
   display.setFont(&FreeMonoBold12pt7b);
-  drawCenteredTextLine(naraCurrentWord, 36);
+  drawCenteredTextLine(naraCurrentWord, 192);
   display.setFont(&FreeMonoBold9pt7b);
 
-  const int16_t glyphX[3] = {16, 122, 67};
-  const int16_t glyphY[3] = {50, 50, 108};
-  const int16_t glyphW[3] = {60, 60, 64};
-  const int16_t glyphH[3] = {60, 60, 64};
+  const int16_t glyphX[3] = {0, 108, 46};
+  const int16_t glyphY[3] = {4, 4, 68};
+  const int16_t glyphW[3] = {92, 92, 100};
+  const int16_t glyphH[3] = {92, 92, 100};
 
   for (uint8_t index = 0; index < 3; index++) {
     const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[index].c_str());
-    if (naraUiOutputFocusIndex == index && !naraUiOutputMenuArmed) {
-      display.drawRect(glyphX[index] - 4, glyphY[index] - 4, glyphW[index] + 8, glyphH[index] + 8, GxEPD_BLACK);
-    }
     if (bitmap != nullptr) {
       drawScaledConsultGlyph(glyphX[index], glyphY[index], bitmap, glyphW[index], glyphH[index]);
     } else {
@@ -2185,25 +2272,25 @@ void renderNaraUiOutput() {
 }
 
 void renderNaraUiMenu() {
-  const char* labels[] = {"LEXICON", "HISTORY", "SETTINGS"};
-  const int16_t centerY[] = {74, 114, 154};
-
-  display.setFont(&FreeMonoBold12pt7b);
-  for (uint8_t index = 0; index < 3; index++) {
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.getTextBounds(labels[index], 0, centerY[index], &x1, &y1, &w, &h);
-    const int16_t textX = (display.width() - static_cast<int16_t>(w)) / 2;
-    if (index == naraUiMenuIndex) {
-      display.drawRect(textX - 10, y1 - 8, w + 20, h + 16, GxEPD_BLACK);
-    }
-    display.setCursor(textX, centerY[index]);
-    display.print(labels[index]);
-  }
-  display.setFont(&FreeMonoBold9pt7b);
+  display.drawBitmap(
+    0,
+    0,
+    NARA_MENU_FRAMES[naraUiMenuIndex],
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
 }
 
 void renderNaraUiHistory() {
+  display.drawBitmap(
+    0,
+    0,
+    NARA_UI_HISTORY_SCREEN,
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
   for (uint8_t row = 0; row < 3; row++) {
     const NaraSampleOutput& entry = naraHistory[row];
     const int16_t y = 58 + row * 40;
@@ -2216,13 +2303,21 @@ void renderNaraUiHistory() {
     for (uint8_t glyphIndex = 0; glyphIndex < 3; glyphIndex++) {
       const uint8_t* bitmap = lookupConsultGlyphBitmap(entry.glyphs[glyphIndex]);
       if (bitmap != nullptr) {
-        drawScaledConsultGlyph(120 + glyphIndex * 22, y - 14, bitmap, 18, 18);
+        drawScaledConsultGlyph(116 + glyphIndex * 24, y - 16, bitmap, 22, 22);
       }
     }
   }
 }
 
 void renderNaraUiSettings() {
+  display.drawBitmap(
+    0,
+    0,
+    NARA_UI_SETTINGS_SCREEN,
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
   for (uint8_t index = 0; index < 4; index++) {
     const int16_t y = 50 + index * 30;
     if (index == naraUiSettingsIndex) {
@@ -2269,44 +2364,73 @@ void failNaraUiCapture(const String& transcript, const String& status) {
   setNaraUiState(NARA_UI_0_IDLE);
 }
 
-void processNaraUiCapture() {
+void naraUiCapturePipelineTask(void* parameter) {
+  (void)parameter;
+  naraUiLastSpeechError = "";
   if (recordedBytes == 0) {
-    failNaraUiCapture("No audio captured.", "TRY AGAIN");
+    naraUiCaptureFailureTranscript = "No audio captured.";
+    naraUiCaptureFailureStatus = "TRY AGAIN";
+    naraUiCaptureTaskSucceeded = false;
+    naraUiCaptureTaskCompleted = true;
+    naraUiCaptureTaskRunning = false;
+    naraUiCaptureTaskHandle = nullptr;
+    vTaskDelete(nullptr);
     return;
   }
 
   if (!wifiConnected) {
-    failNaraUiCapture("WiFi is not connected.", "WIFI FAIL");
+    naraUiCaptureFailureTranscript = "WiFi is not connected.";
+    naraUiCaptureFailureStatus = "WIFI FAIL";
+    naraUiCaptureTaskSucceeded = false;
+    naraUiCaptureTaskCompleted = true;
+    naraUiCaptureTaskRunning = false;
+    naraUiCaptureTaskHandle = nullptr;
+    vTaskDelete(nullptr);
     return;
   }
 
   if (!hasDeepgramConfig()) {
-    failNaraUiCapture("Deepgram is not configured.", "CONFIG");
+    naraUiCaptureFailureTranscript = "Deepgram is not configured.";
+    naraUiCaptureFailureStatus = "CONFIG";
+    naraUiCaptureTaskSucceeded = false;
+    naraUiCaptureTaskCompleted = true;
+    naraUiCaptureTaskRunning = false;
+    naraUiCaptureTaskHandle = nullptr;
+    vTaskDelete(nullptr);
     return;
   }
 
   appState = STATE_TRANSCRIBING;
   naraUiProcessingStatus = "TRANSCRIBING";
   naraUiNeedsRender = true;
-  renderNaraUiScreen();
 
   const String transcript = deepgramTranscribe();
   if (transcript.isEmpty()) {
-    appState = STATE_IDLE;
-    failNaraUiCapture("No speech recognized.", "TRY AGAIN");
+    naraUiCaptureFailureTranscript =
+      naraUiLastSpeechError.isEmpty() ? String("No speech recognized.") : naraUiLastSpeechError;
+    naraUiCaptureFailureStatus = "TRY AGAIN";
+    naraUiCaptureTaskSucceeded = false;
+    naraUiCaptureTaskCompleted = true;
+    naraUiCaptureTaskRunning = false;
+    naraUiCaptureTaskHandle = nullptr;
+    vTaskDelete(nullptr);
     return;
   }
 
   naraUiTranscript = transcript;
   naraUiProcessingStatus = "CONSULTING";
   naraUiNeedsRender = true;
-  renderNaraUiScreen();
 
   if (USE_MADDI_PIPELINE && !supabaseUrl.isEmpty() && !deviceApiKey.isEmpty()) {
     appState = STATE_THINKING;
     if (!maddiConsult()) {
-      appState = STATE_IDLE;
-      failNaraUiCapture(transcript, "CONSULT FAIL");
+      naraUiCaptureFailureTranscript = transcript;
+      naraUiCaptureFailureStatus = "CONSULT FAIL";
+      naraUiCaptureTaskSucceeded = false;
+      naraUiCaptureTaskCompleted = true;
+      naraUiCaptureTaskRunning = false;
+      naraUiCaptureTaskHandle = nullptr;
+      vTaskDelete(nullptr);
       return;
     }
     setNaraCurrentOutputFromConsult();
@@ -2318,6 +2442,46 @@ void processNaraUiCapture() {
     setNaraCurrentOutputFromSample(sample);
   }
 
+  naraUiCaptureTaskSucceeded = true;
+  naraUiCaptureTaskCompleted = true;
+  naraUiCaptureTaskRunning = false;
+  naraUiCaptureTaskHandle = nullptr;
+  vTaskDelete(nullptr);
+}
+
+void startNaraUiCapturePipeline() {
+  if (naraUiCaptureTaskRunning) return;
+
+  naraUiCaptureFailureTranscript = "";
+  naraUiCaptureFailureStatus = "";
+  naraUiCaptureTaskCompleted = false;
+  naraUiCaptureTaskSucceeded = false;
+  naraUiCaptureTaskRunning = true;
+  naraUiTranscript = "";
+  naraUiProcessingStatus = "TRANSCRIBING";
+  naraUiNeedsRender = true;
+
+  xTaskCreatePinnedToCore(
+    naraUiCapturePipelineTask,
+    "nara_capture",
+    16384,
+    nullptr,
+    1,
+    &naraUiCaptureTaskHandle,
+    tskNO_AFFINITY
+  );
+}
+
+void processNaraUiPipelineResult() {
+  if (!naraUiCaptureTaskCompleted) return;
+
+  naraUiCaptureTaskCompleted = false;
+  if (!naraUiCaptureTaskSucceeded) {
+    appState = STATE_IDLE;
+    failNaraUiCapture(naraUiCaptureFailureTranscript, naraUiCaptureFailureStatus);
+    return;
+  }
+
   naraUiOutputFocusIndex = 0;
   naraUiOutputMenuArmed = false;
   naraUiProcessingStatus = "GLYPHS IN FLIGHT";
@@ -2326,42 +2490,37 @@ void processNaraUiCapture() {
 }
 
 void renderNaraUiLexicon() {
-  constexpr int visibleCount = 22;
-  constexpr int centerX = 100;
-  constexpr int centerY = 102;
-  constexpr int radiusX = 68;
-  constexpr int radiusY = 48;
   constexpr int lexiconCount = sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]);
-  const int beforeCenter = (visibleCount - 1) / 2;
-  const int afterCenter = visibleCount - 1 - beforeCenter;
+  static constexpr int8_t offsets[5] = {-2, -1, 0, 1, 2};
+  static constexpr int16_t positionsX[5] = {24, 58, 100, 142, 176};
+  static constexpr int16_t centersY[5] = {110, 108, 106, 108, 110};
+  static constexpr uint16_t sizes[5] = {20, 34, 84, 34, 20};
+  display.drawBitmap(
+    0,
+    0,
+    NARA_UI_LEXICON_SCREEN,
+    NARA_UI_FRAME_WIDTH,
+    NARA_UI_FRAME_HEIGHT,
+    GxEPD_BLACK
+  );
 
-  for (int offset = -beforeCenter; offset <= afterCenter; offset++) {
-    int glyphIndex = static_cast<int>(naraUiLexiconIndex) + offset;
+  for (uint8_t slot = 0; slot < 5; slot++) {
+    int glyphIndex = static_cast<int>(naraUiLexiconIndex) + offsets[slot];
     while (glyphIndex < 0) glyphIndex += lexiconCount;
     while (glyphIndex >= lexiconCount) glyphIndex -= lexiconCount;
 
     const uint8_t* bitmap = lookupConsultGlyphBitmap(NARA_LEXICON_GLYPHS[glyphIndex]);
     if (bitmap == nullptr) continue;
-
-    if (offset == 0) {
-      display.drawRect(centerX - 34, centerY - 34, 68, 68, GxEPD_BLACK);
-      drawScaledConsultGlyph(centerX - 28, centerY - 28, bitmap, 56, 56);
-      continue;
-    }
-
-    const int ringOffset = (offset < 0) ? (offset + beforeCenter + 1) : (offset + beforeCenter);
-    const float angle = ((static_cast<float>(ringOffset) / static_cast<float>(visibleCount - 1)) * TWO_PI) - HALF_PI;
-    const int16_t x = centerX + static_cast<int16_t>(cosf(angle) * radiusX);
-    const int16_t y = centerY + static_cast<int16_t>(sinf(angle) * radiusY);
-    const int distance = abs(offset);
-    const uint16_t size = static_cast<uint16_t>(max(12, 22 - distance / 2));
-    drawScaledConsultGlyph(x - size / 2, y - size / 2, bitmap, size, size);
+    const int16_t x = positionsX[slot] - static_cast<int16_t>(sizes[slot] / 2);
+    const int16_t y = centersY[slot] - static_cast<int16_t>(sizes[slot] / 2);
+    drawScaledConsultGlyph(x, y, bitmap, sizes[slot], sizes[slot]);
   }
 }
 
 void setNaraUiState(NaraUiState nextState) {
   naraUiState = nextState;
   naraUiStateStartedMs = millis();
+  naraUiLastAnimationTickMs = naraUiStateStartedMs;
   naraUiLastPotBucket = -1;
   naraUiLastPotBucketChangeMs = millis();
   naraUiLastEncoderPosition = encoderPosition;
@@ -2371,9 +2530,13 @@ void setNaraUiState(NaraUiState nextState) {
 void renderNaraUiScreen() {
   if (!displayReady) return;
 
-  const uint8_t renderPasses = naraUiNeedsFullRefresh ? 1 : 2;
+  const bool singlePassState =
+    naraUiState == NARA_UI_1_SPLASH ||
+    naraUiState == NARA_UI_2_LISTENING ||
+    naraUiState == NARA_UI_3_PROCESSING;
+  const uint8_t renderPasses = (naraUiNeedsFullRefresh || singlePassState) ? 1 : 2;
   for (uint8_t pass = 0; pass < renderPasses; pass++) {
-    if (naraUiState == NARA_UI_1_SPLASH || naraUiNeedsFullRefresh) {
+    if ((naraUiState == NARA_UI_1_SPLASH && naraUiNeedsFullRefresh) || naraUiNeedsFullRefresh) {
       display.setFullWindow();
     } else {
       display.setPartialWindow(0, 0, display.width(), display.height());
@@ -2386,47 +2549,31 @@ void renderNaraUiScreen() {
 
       switch (naraUiState) {
         case NARA_UI_0_IDLE:
-          drawNaraUiHeader("IDLE", "UI_0");
           renderNaraUiIdle();
-          drawNaraUiFooter(naraUiIdlePotBucket == 1 ? "MENU" : "RECORD", "SELECT");
           break;
         case NARA_UI_1_SPLASH:
           renderNaraUiSplash();
           break;
         case NARA_UI_2_LISTENING:
-          drawNaraUiHeader("LISTENING", "UI_2");
           renderNaraUiListening();
-          drawNaraUiFooter("RECORD", "CANCEL");
           break;
         case NARA_UI_3_PROCESSING:
-          drawNaraUiHeader("PROCESSING", "UI_3");
           renderNaraUiProcessing();
-          drawNaraUiFooter("THINKING", "AUTO");
           break;
         case NARA_UI_4_OUTPUT:
-          drawNaraUiHeader("", "UI_4");
           renderNaraUiOutput();
-          drawNaraUiFooter(naraUiOutputMenuArmed ? "MENU" : "GLYPH", "BACK");
           break;
         case NARA_UI_MENU:
-          drawNaraUiHeader("MENU", "UI_M");
           renderNaraUiMenu();
-          drawNaraUiFooter("ROTATE", "BACK");
           break;
         case NARA_UI_3A_LEXICON:
-          drawNaraUiHeader("LEXICON", "UI_3A");
           renderNaraUiLexicon();
-          drawNaraUiFooter("ROTATE", "BACK");
           break;
         case NARA_UI_3B_HISTORY:
-          drawNaraUiHeader("HISTORY", "UI_3B");
           renderNaraUiHistory();
-          drawNaraUiFooter("SELECT", "BACK");
           break;
         case NARA_UI_3C_SETTINGS:
-          drawNaraUiHeader("SETTINGS", "UI_3C");
           renderNaraUiSettings();
-          drawNaraUiFooter("TOGGLE", "BACK");
           break;
         case NARA_UI_5A_DETAIL:
           drawNaraUiHeader("", "UI_5A");
@@ -2450,23 +2597,16 @@ void applyNaraUiPotSelection(uint8_t bucket) {
   bool changed = false;
   switch (naraUiState) {
     case NARA_UI_0_IDLE:
-      if (bucket != naraUiIdlePotBucket) {
-        naraUiIdlePotBucket = bucket;
+      if (naraUiIdlePotBucket != 0) {
+        naraUiIdlePotBucket = 0;
         changed = true;
       }
       break;
     case NARA_UI_4_OUTPUT:
-      if (bucket >= 3) {
-        if (!naraUiOutputMenuArmed) {
-          naraUiOutputMenuArmed = true;
-          changed = true;
-        }
-      } else {
-        if (naraUiOutputMenuArmed || bucket != naraUiOutputFocusIndex) {
-          naraUiOutputMenuArmed = false;
-          naraUiOutputFocusIndex = bucket;
-          changed = true;
-        }
+      if (bucket != naraUiOutputFocusIndex) {
+        naraUiOutputFocusIndex = bucket;
+        naraUiOutputMenuArmed = false;
+        changed = true;
       }
       break;
     case NARA_UI_MENU:
@@ -2510,22 +2650,9 @@ void applyNaraUiPotSelection(uint8_t bucket) {
 
 void handleNaraUiSelectPress() {
   switch (naraUiState) {
-    case NARA_UI_0_IDLE:
-      if (naraUiIdlePotBucket == 1) {
-        naraUiReturnState = NARA_UI_0_IDLE;
-        naraUiMenuIndex = 0;
-        setNaraUiState(NARA_UI_MENU);
-      }
-      break;
     case NARA_UI_4_OUTPUT:
-      if (naraUiOutputMenuArmed) {
-        naraUiReturnState = NARA_UI_4_OUTPUT;
-        naraUiMenuIndex = 0;
-        setNaraUiState(NARA_UI_MENU);
-      } else {
-        naraUiDetailGlyphIndex = naraUiOutputFocusIndex;
-        setNaraUiState(NARA_UI_5A_DETAIL);
-      }
+      naraUiDetailGlyphIndex = naraUiOutputFocusIndex;
+      setNaraUiState(NARA_UI_5A_DETAIL);
       break;
     case NARA_UI_MENU:
       if (naraUiMenuIndex == 0) setNaraUiState(NARA_UI_3A_LEXICON);
@@ -2551,6 +2678,35 @@ void handleNaraUiBackPress() {
   switch (naraUiState) {
     case NARA_UI_2_LISTENING:
       setNaraUiState(NARA_UI_0_IDLE);
+      break;
+    case NARA_UI_3_PROCESSING:
+      setNaraUiState(NARA_UI_0_IDLE);
+      break;
+    case NARA_UI_4_OUTPUT:
+      setNaraUiState(NARA_UI_0_IDLE);
+      break;
+    case NARA_UI_MENU:
+      setNaraUiState(naraUiReturnState);
+      break;
+    case NARA_UI_3A_LEXICON:
+    case NARA_UI_3B_HISTORY:
+    case NARA_UI_3C_SETTINGS:
+      setNaraUiState(NARA_UI_MENU);
+      break;
+    case NARA_UI_5A_DETAIL:
+      setNaraUiState(NARA_UI_4_OUTPUT);
+      break;
+    default:
+      break;
+  }
+}
+
+void handleNaraUiMenuPress() {
+  switch (naraUiState) {
+    case NARA_UI_0_IDLE:
+      naraUiReturnState = NARA_UI_0_IDLE;
+      naraUiMenuIndex = 0;
+      setNaraUiState(NARA_UI_MENU);
       break;
     case NARA_UI_4_OUTPUT:
       setNaraUiState(NARA_UI_0_IDLE);
@@ -2597,22 +2753,36 @@ void startNaraUiTest() {
 }
 
 void processNaraUiTest() {
+  processNaraUiPipelineResult();
   updateRotaryEncoder();
   const bool recordChanged = updateNaraButtonState(naraRecordButton);
   const bool selectChanged = updateNaraButtonState(naraSelectButton);
   const bool backChanged = updateNaraButtonState(naraBackButton);
+  bool handledButtonPress = false;
 
-  if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_1_SPLASH) {
-    naraUiNeedsFullRefresh = false;
-    naraUiRecordArmed = false;
-    setNaraUiState(NARA_UI_0_IDLE);
+  const unsigned long now = millis();
+  unsigned long animationIntervalMs = 0;
+  if (naraUiState == NARA_UI_2_LISTENING) animationIntervalMs = NARA_UI_LISTENING_FRAME_MS;
+  else if (naraUiState == NARA_UI_3_PROCESSING) animationIntervalMs = NARA_UI_PROCESSING_FRAME_MS;
+  if (animationIntervalMs > 0 && now - naraUiLastAnimationTickMs >= animationIntervalMs) {
+    naraUiLastAnimationTickMs = now;
+    naraUiNeedsRender = true;
   }
 
   if (naraUiState == NARA_UI_0_IDLE && !naraRecordButton.stablePressed) {
     naraUiRecordArmed = true;
   }
 
-  if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_0_IDLE && naraUiRecordArmed) {
+  if (recordChanged && naraRecordButton.stablePressed && naraUiState == NARA_UI_1_SPLASH) {
+    naraUiNeedsFullRefresh = false;
+    naraUiRecordArmed = false;
+    setNaraUiState(NARA_UI_0_IDLE);
+    handledButtonPress = true;
+  }
+
+  if (!handledButtonPress &&
+      recordChanged && naraRecordButton.stablePressed &&
+      naraUiState == NARA_UI_0_IDLE && naraUiRecordArmed) {
     naraUiRecordArmed = false;
     naraUiTranscript = "";
     naraUiProcessingStatus = "GLYPHS IN FLIGHT";
@@ -2622,23 +2792,32 @@ void processNaraUiTest() {
       return;
     }
     setNaraUiState(NARA_UI_2_LISTENING);
+    handledButtonPress = true;
   }
 
   if (naraUiState == NARA_UI_2_LISTENING && recording) {
     captureAudioLoop();
   }
 
-  if (recordChanged && !naraRecordButton.stablePressed && naraUiState == NARA_UI_2_LISTENING) {
+  if (!handledButtonPress &&
+      recordChanged && !naraRecordButton.stablePressed &&
+      naraUiState == NARA_UI_2_LISTENING) {
     finalizeHoldToSpeakRecording();
     setNaraUiState(NARA_UI_3_PROCESSING);
-    processNaraUiCapture();
+    startNaraUiCapturePipeline();
+    handledButtonPress = true;
   }
 
-  if (selectChanged && naraSelectButton.stablePressed) {
+  if (!handledButtonPress &&
+      recordChanged && naraRecordButton.stablePressed &&
+      naraUiState != NARA_UI_0_IDLE &&
+      naraUiState != NARA_UI_1_SPLASH &&
+      naraUiState != NARA_UI_2_LISTENING) {
     handleNaraUiSelectPress();
+    handledButtonPress = true;
   }
 
-  if (backChanged && naraBackButton.stablePressed) {
+  if (!handledButtonPress && selectChanged && naraSelectButton.stablePressed) {
     if (naraUiState == NARA_UI_2_LISTENING && recording) {
       recording = false;
       stopMicrophone();
@@ -2646,52 +2825,40 @@ void processNaraUiTest() {
       appState = STATE_IDLE;
     }
     handleNaraUiBackPress();
+    handledButtonPress = true;
   }
 
-  const int32_t encoderDelta = encoderPosition - naraUiLastEncoderPosition;
-  if (encoderDelta != 0) {
-    naraUiLastEncoderPosition = encoderPosition;
-    const int step = (encoderDelta > 0) ? 1 : -1;
-    const int iterations = abs(static_cast<int>(encoderDelta));
+  if (!handledButtonPress && backChanged && naraBackButton.stablePressed) {
+    handleNaraUiMenuPress();
+    handledButtonPress = true;
+  }
 
-    for (int index = 0; index < iterations; index++) {
-      switch (naraUiState) {
-        case NARA_UI_0_IDLE:
-          naraUiIdlePotBucket = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiIdlePotBucket) + step, 2));
-          break;
-        case NARA_UI_4_OUTPUT: {
-          const int currentBucket = naraUiOutputMenuArmed ? 3 : static_cast<int>(naraUiOutputFocusIndex);
-          const int nextBucket = positiveModulo(currentBucket + step, 4);
-          if (nextBucket == 3) {
-            naraUiOutputMenuArmed = true;
-          } else {
-            naraUiOutputMenuArmed = false;
-            naraUiOutputFocusIndex = static_cast<uint8_t>(nextBucket);
-          }
-          break;
-        }
-        case NARA_UI_MENU:
-          naraUiMenuIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiMenuIndex) + step, 3));
-          break;
-        case NARA_UI_3A_LEXICON: {
-          const int count = static_cast<int>(sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]));
-          naraUiLexiconIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiLexiconIndex) + step, count));
-          break;
-        }
-        case NARA_UI_3B_HISTORY:
-          naraUiHistoryIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiHistoryIndex) + step, 3));
-          break;
-        case NARA_UI_3C_SETTINGS:
-          naraUiSettingsIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiSettingsIndex) + step, 4));
-          break;
-        case NARA_UI_5A_DETAIL:
-          naraUiDetailGlyphIndex = static_cast<uint8_t>(positiveModulo(static_cast<int>(naraUiDetailGlyphIndex) + step, 3));
-          break;
-        default:
-          break;
-      }
-    }
-    naraUiNeedsRender = true;
+  uint8_t stableBucket = 0;
+  uint8_t bucketCount = 0;
+  switch (naraUiState) {
+    case NARA_UI_4_OUTPUT:
+      bucketCount = 3;
+      break;
+    case NARA_UI_MENU:
+      bucketCount = 3;
+      break;
+    case NARA_UI_3A_LEXICON:
+      bucketCount = static_cast<uint8_t>(sizeof(NARA_LEXICON_GLYPHS) / sizeof(NARA_LEXICON_GLYPHS[0]));
+      break;
+    case NARA_UI_3B_HISTORY:
+      bucketCount = 3;
+      break;
+    case NARA_UI_3C_SETTINGS:
+      bucketCount = 4;
+      break;
+    case NARA_UI_5A_DETAIL:
+      bucketCount = 3;
+      break;
+    default:
+      break;
+  }
+  if (bucketCount > 1 && readStableNaraUiPotBucket(bucketCount, stableBucket)) {
+    applyNaraUiPotSelection(stableBucket);
   }
 
   if ((recordChanged || selectChanged || backChanged) && naraUiState != NARA_UI_1_SPLASH) {
@@ -3232,11 +3399,10 @@ bool classifyAudioOnDevice() {
 
 void initializeSystem() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(POT_PIN, INPUT_PULLUP);
-  pinMode(GALLERY_POT_PIN, INPUT_PULLUP);
+  pinMode(POT_PIN, INPUT);
   pinMode(SELECT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(BACK_BUTTON_PIN, INPUT_PULLUP);
-  encoderLastClkState = digitalRead(ENCODER_CLK_PIN);
+  encoderLastClkState = HIGH;
   encoderLastEdgeMs = millis();
   ensureAudioBuffer();
   printHardwareSummary();
@@ -3403,6 +3569,7 @@ void processSerialCommands() {
     }
 
     if (line == "STATUS") {
+      updateRotaryEncoder();
       Serial.print("[Status] ");
       Serial.println(statusLine);
       Serial.print("[Status] WiFi=");
@@ -3446,6 +3613,7 @@ void processSerialCommands() {
         Serial.printf("VAD: floor=%.1fdB threshold=%.1fdB calibrated=%s\n",
           vadNoiseFloorDb, vadThresholdDb, vadCalibrated ? "yes" : "no");
       }
+      Serial.printf("[Status] Pot GPIO%d=%ld\n", NARA_UI_POT_PIN, static_cast<long>(encoderPosition));
       continue;
     }
 
@@ -3475,6 +3643,12 @@ void processSerialCommands() {
 
     if (line == "SENSORS") {
       printSensorSnapshot(false);
+      continue;
+    }
+
+    if (line == "POT") {
+      updateRotaryEncoder();
+      Serial.printf("[Pot] GPIO%d=%ld\n", NARA_UI_POT_PIN, static_cast<long>(encoderPosition));
       continue;
     }
 

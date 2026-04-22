@@ -34,8 +34,40 @@ const DEEPGRAM_URL =
   "&smart_format=true" +
   "&language=en-US";
 
-const FALLBACK_GLYPHS: readonly string[] = ["venture", "clarity", "bond"];
-const FALLBACK_WORD = "reflect";
+const FALLBACK_GLYPH_POOL: readonly string[] = [
+  "venture",
+  "clarity",
+  "bond",
+  "balance",
+  "introspect",
+  "transformation",
+  "harmony",
+  "threshold",
+  "opening",
+  "courage",
+  "healing",
+  "release",
+  "transition",
+  "pattern",
+  "dialogue",
+];
+const FALLBACK_WORD_POOL: readonly string[] = [
+  "reflect",
+  "notice",
+  "breathe",
+  "soften",
+  "begin",
+  "listen",
+  "release",
+  "steady",
+  "open",
+  "return",
+  "trust",
+  "pause",
+  "shift",
+  "root",
+  "move",
+];
 const MAX_WORD_LENGTH = 15;
 const REQUIRED_GLYPH_COUNT = 3;
 
@@ -428,7 +460,7 @@ function repairGlyphSelection(
     if (repaired.length === REQUIRED_GLYPH_COUNT) return repaired;
   }
 
-  for (const fallback of FALLBACK_GLYPHS) {
+  for (const fallback of FALLBACK_GLYPH_POOL) {
     if (seen.has(fallback)) continue;
     repaired.push(fallback);
     seen.add(fallback);
@@ -436,6 +468,18 @@ function repairGlyphSelection(
   }
 
   return repaired;
+}
+
+function fallbackGlyphSelection(): string[] {
+  return FALLBACK_GLYPH_POOL.slice(0, REQUIRED_GLYPH_COUNT);
+}
+
+function fallbackWordSelection(seed: string): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(index)) >>> 0;
+  }
+  return FALLBACK_WORD_POOL[hash % FALLBACK_WORD_POOL.length];
 }
 
 function normalizeAndValidatePickerResult(
@@ -610,8 +654,8 @@ serve(async (req: Request) => {
 
     if (validationError !== null) {
       // Fallback: use safe defaults
-      selectedGlyphs = [...FALLBACK_GLYPHS];
-      selectedWord = FALLBACK_WORD;
+      selectedGlyphs = fallbackGlyphSelection();
+      selectedWord = fallbackWordSelection(transcript);
     } else {
       selectedGlyphs = repairGlyphSelection(pickerResult.glyphs, validGlyphIdList);
       selectedWord = pickerResult.word;
@@ -629,15 +673,15 @@ serve(async (req: Request) => {
       );
 
       if (retryError !== null) {
-        selectedGlyphs = [...FALLBACK_GLYPHS];
-        selectedWord = FALLBACK_WORD;
+        selectedGlyphs = fallbackGlyphSelection();
+        selectedWord = fallbackWordSelection(transcript);
       } else {
         selectedGlyphs = repairGlyphSelection(retryResult.glyphs, validGlyphIdList);
         selectedWord = retryResult.word;
       }
     } catch {
-      selectedGlyphs = [...FALLBACK_GLYPHS];
-      selectedWord = FALLBACK_WORD;
+      selectedGlyphs = fallbackGlyphSelection();
+      selectedWord = fallbackWordSelection(transcript);
     }
   }
 
