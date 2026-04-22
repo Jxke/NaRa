@@ -34,23 +34,7 @@ const DEEPGRAM_URL =
   "&smart_format=true" +
   "&language=en-US";
 
-const FALLBACK_GLYPH_POOL: readonly string[] = [
-  "venture",
-  "clarity",
-  "bond",
-  "balance",
-  "introspect",
-  "transformation",
-  "harmony",
-  "threshold",
-  "opening",
-  "courage",
-  "healing",
-  "release",
-  "transition",
-  "pattern",
-  "dialogue",
-];
+const EMERGENCY_FALLBACK_GLYPHS: readonly string[] = ["venture", "clarity", "bond"];
 const FALLBACK_WORD_POOL: readonly string[] = [
   "reflect",
   "notice",
@@ -70,6 +54,8 @@ const FALLBACK_WORD_POOL: readonly string[] = [
 ];
 const MAX_WORD_LENGTH = 15;
 const REQUIRED_GLYPH_COUNT = 3;
+const RECENT_GLYPH_HISTORY_LIMIT = 8;
+const OVERUSED_GLYPH_IDS: readonly string[] = ["intuition", "threshold", "clarity"];
 
 // ---------------------------------------------------------------------------
 // Prompt templates
@@ -100,6 +86,9 @@ const PICKER_SYSTEM_PROMPT =
   "You MUST choose only from the exact glyph IDs provided in the Available glyphs list. " +
   "Copy those IDs verbatim. Do not invent IDs. Do not rename IDs. Do not change spacing, " +
   "punctuation, plurality, or casing. If uncertain, reuse exact IDs from the list. " +
+  "Avoid overusing intuition, threshold, and clarity; choose them only when the analysis " +
+  "clearly requires their specific meaning. If recent history shows a glyph has appeared " +
+  "often, prefer a different valid glyph unless it is essential. " +
   "Pick 1 companion word (max 15 chars, lowercase). " +
   "You MUST respond with ONLY this exact JSON format, nothing else:\n" +
   '{"glyphs": ["id1", "id2", "id3"], "word": "yourword"}\n' +
@@ -147,6 +136,10 @@ interface Tier4Row {
   theme_type: string;
   description: string | null;
   strength: number;
+}
+
+interface ConsultationGlyphHistoryRow {
+  glyph_ids: string[] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,13 +347,44 @@ function formatGlyphInventory(glyphs: GlyphRow[]): string {
     .join("\n");
 }
 
+function formatRecentGlyphGuidance(recentGlyphRows: ConsultationGlyphHistoryRow[]): string {
+  const counts = new Map<string, number>();
+  for (const row of recentGlyphRows) {
+    for (const id of row.glyph_ids ?? []) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+
+  const repeatedGlyphs = [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  const lines: string[] = [
+    "Recent glyph history guidance:",
+    "Do not mechanically repeat recent glyphs. Treat repeated glyphs as downranked, not forbidden.",
+  ];
+
+  if (repeatedGlyphs.length > 0) {
+    lines.push(
+      `Recently repeated glyphs: ${repeatedGlyphs.map(([id, count]) => `${id} x${count}`).join(", ")}.`,
+    );
+  }
+
+  lines.push(
+    `Especially avoid ${OVERUSED_GLYPH_IDS.join(", ")} unless the user's situation strongly points there.`,
+  );
+
+  return lines.join("\n");
+}
+
 async function runGlyphPicker(
   reasoning: string,
   glyphInventory: string,
+  recentGlyphGuidance: string,
   retryPrompt?: string,
 ): Promise<PickerResult> {
   const userMessage =
-    `Analysis:\n${reasoning}\n\nAvailable glyphs:\n${glyphInventory}` +
+    `Analysis:\n${reasoning}\n\n${recentGlyphGuidance}\n\nAvailable glyphs:\n${glyphInventory}` +
     (retryPrompt ? `\n\n${retryPrompt}` : "");
 
   const result = await chat(
@@ -460,7 +484,7 @@ function repairGlyphSelection(
     if (repaired.length === REQUIRED_GLYPH_COUNT) return repaired;
   }
 
-  for (const fallback of FALLBACK_GLYPH_POOL) {
+  for (const fallback of fallbackGlyphSelection(validGlyphIds, seen)) {
     if (seen.has(fallback)) continue;
     repaired.push(fallback);
     seen.add(fallback);
@@ -470,16 +494,34 @@ function repairGlyphSelection(
   return repaired;
 }
 
-function fallbackGlyphSelection(): string[] {
-  return FALLBACK_GLYPH_POOL.slice(0, REQUIRED_GLYPH_COUNT);
-}
-
-function fallbackWordSelection(seed: string): string {
+function hashSeed(seed: string): number {
   let hash = 0;
   for (let index = 0; index < seed.length; index++) {
     hash = ((hash << 5) - hash + seed.charCodeAt(index)) >>> 0;
   }
-  return FALLBACK_WORD_POOL[hash % FALLBACK_WORD_POOL.length];
+  return hash;
+}
+
+function fallbackGlyphSelection(
+  validGlyphIds: readonly string[],
+  excluded: ReadonlySet<string> = new Set<string>(),
+): string[] {
+  const candidates = (validGlyphIds.length > 0 ? validGlyphIds : EMERGENCY_FALLBACK_GLYPHS)
+    .filter((id) => !excluded.has(id));
+  const selected: string[] = [];
+  const remaining = [...candidates];
+
+  while (selected.length < REQUIRED_GLYPH_COUNT && remaining.length > 0) {
+    const index = Math.floor(Math.random() * remaining.length);
+    const [glyphId] = remaining.splice(index, 1);
+    selected.push(glyphId);
+  }
+
+  return selected;
+}
+
+function fallbackWordSelection(seed: string): string {
+  return FALLBACK_WORD_POOL[hashSeed(seed) % FALLBACK_WORD_POOL.length];
 }
 
 function normalizeAndValidatePickerResult(
@@ -586,13 +628,20 @@ serve(async (req: Request) => {
   // -----------------------------------------------------------------------
   let contextBlock: string;
   let glyphRows: GlyphRow[];
+  let recentGlyphRows: ConsultationGlyphHistoryRow[];
 
   try {
-    const [context, glyphResult] = await Promise.all([
+    const [context, glyphResult, recentGlyphResult] = await Promise.all([
       fetchContext(deviceId),
       supabase
         .from("glyphs")
         .select("id, tags, interpretations, prompt_questions"),
+      supabase
+        .from("consultations")
+        .select("glyph_ids")
+        .eq("device_id", deviceId)
+        .order("created_at", { ascending: false })
+        .limit(RECENT_GLYPH_HISTORY_LIMIT),
     ]);
 
     contextBlock = context;
@@ -600,8 +649,12 @@ serve(async (req: Request) => {
     if (glyphResult.error) {
       throw new Error(`Failed to fetch glyphs: ${glyphResult.error.message}`);
     }
+    if (recentGlyphResult.error) {
+      throw new Error(`Failed to fetch recent glyph history: ${recentGlyphResult.error.message}`);
+    }
 
     glyphRows = (glyphResult.data ?? []) as GlyphRow[];
+    recentGlyphRows = (recentGlyphResult.data ?? []) as ConsultationGlyphHistoryRow[];
   } catch (err: unknown) {
     const detail = err instanceof Error ? err.message : "Context fetch failed";
     return errorResponse("Failed to load context", 502, detail);
@@ -610,6 +663,7 @@ serve(async (req: Request) => {
   const validGlyphIdList = glyphRows.map((g) => g.id);
   const validGlyphIds = new Set(validGlyphIdList);
   const glyphInventoryText = formatGlyphInventory(glyphRows);
+  const recentGlyphGuidance = formatRecentGlyphGuidance(recentGlyphRows);
 
   // -----------------------------------------------------------------------
   // Stage 2: Deep Reasoner
@@ -632,7 +686,7 @@ serve(async (req: Request) => {
   try {
     // First attempt
     let { pickerResult, validationError } = normalizeAndValidatePickerResult(
-      await runGlyphPicker(reasoning, glyphInventoryText),
+      await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance),
       validGlyphIdList,
     );
 
@@ -644,7 +698,7 @@ serve(async (req: Request) => {
 
       try {
         ({ pickerResult, validationError } = normalizeAndValidatePickerResult(
-          await runGlyphPicker(reasoning, glyphInventoryText, retryHint),
+          await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance, retryHint),
           validGlyphIdList,
         ));
       } catch {
@@ -653,8 +707,8 @@ serve(async (req: Request) => {
     }
 
     if (validationError !== null) {
-      // Fallback: use safe defaults
-      selectedGlyphs = fallbackGlyphSelection();
+      // Fallback: choose from the full live glyph inventory.
+      selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
       selectedWord = fallbackWordSelection(transcript);
     } else {
       selectedGlyphs = repairGlyphSelection(pickerResult.glyphs, validGlyphIdList);
@@ -668,19 +722,19 @@ serve(async (req: Request) => {
 
     try {
       const { pickerResult: retryResult, validationError: retryError } = normalizeAndValidatePickerResult(
-        await runGlyphPicker(reasoning, glyphInventoryText, retryHint),
+        await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance, retryHint),
         validGlyphIdList,
       );
 
       if (retryError !== null) {
-        selectedGlyphs = fallbackGlyphSelection();
+        selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
         selectedWord = fallbackWordSelection(transcript);
       } else {
         selectedGlyphs = repairGlyphSelection(retryResult.glyphs, validGlyphIdList);
         selectedWord = retryResult.word;
       }
     } catch {
-      selectedGlyphs = fallbackGlyphSelection();
+      selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
       selectedWord = fallbackWordSelection(transcript);
     }
   }

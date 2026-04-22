@@ -88,13 +88,11 @@ constexpr uint32_t I2C_CLOCK_HZ = 50000;
 
 constexpr uint32_t SAMPLE_RATE = 16000;
 constexpr uint16_t WAV_HEADER_SIZE = 44;
-constexpr uint32_t MAX_RECORD_SECONDS = 10;
-constexpr size_t MAX_AUDIO_BYTES = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;  // 320KB in PSRAM
 constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
 constexpr unsigned long SENSOR_MONITOR_INTERVAL_MS = 1000;
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
 constexpr uint32_t CAPTION_RECORD_MS = 4000;
-constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 250;
+constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 5000;
 
 // Ambient context capture — periodic 10s recordings every 60s
 constexpr uint32_t AMBIENT_RECORD_MS = 10000;        // 10s recording
@@ -104,8 +102,6 @@ constexpr uint32_t AMBIENT_SILENCE_TIMEOUT_MS = 2000;
 constexpr uint32_t AMBIENT_LISTEN_WINDOW_MS = 10000;  // listen window = record duration
 constexpr uint32_t AMBIENT_REST_SPEECH_MS = 50000;    // same rest whether speech or not
 constexpr uint32_t AMBIENT_REST_SILENCE_MS = 50000;
-constexpr uint32_t CONSULT_RECORD_SECONDS = 5;       // button-hold limited to 5s
-constexpr size_t CONSULT_MAX_AUDIO = SAMPLE_RATE * 2 * CONSULT_RECORD_SECONDS;
 constexpr size_t AMBIENT_MAX_AUDIO = SAMPLE_RATE * 2 * (AMBIENT_MAX_RECORD_MS / 1000);  // 960KB
 constexpr unsigned long CAPTION_LOOP_GAP_MS = 500;
 constexpr bool FORCE_DEFAULT_SYSTEM_PROMPT_MODE = true;
@@ -179,8 +175,9 @@ bool drvLibraryReady = false;
 uint8_t drvI2cAddress = 0;
 uint8_t mpuI2cAddress = 0;
 
-// Audio buffer allocated from PSRAM at boot (640KB + WAV header for 20s recording)
+// Audio buffer lives in PSRAM and grows on demand for hold-to-speak recordings.
 uint8_t* audioBuffer = nullptr;
+size_t audioBufferCapacity = 0;
 size_t recordedBytes = 0;
 unsigned long recordStartMs = 0;
 unsigned long lastSensorMonitorMs = 0;
@@ -1274,17 +1271,38 @@ void printSensorSnapshot(bool includeMic) {
   }
 }
 
-void ensureAudioBuffer() {
-  if (audioBuffer != nullptr) return;
-  const size_t bufSize = MAX_AUDIO_BYTES + WAV_HEADER_SIZE;
-  audioBuffer = reinterpret_cast<uint8_t*>(heap_caps_malloc(bufSize, MALLOC_CAP_SPIRAM));
-  if (audioBuffer) {
-    Serial.printf("[Mic] PSRAM audio buffer allocated: %u bytes\n",
-      static_cast<unsigned>(bufSize));
-  } else {
-    Serial.printf("[Mic] PSRAM audio buffer FAILED (%u bytes)\n",
-      static_cast<unsigned>(bufSize));
+bool ensureAudioCapacity(size_t requiredAudioBytes) {
+  if (audioBuffer != nullptr && audioBufferCapacity >= requiredAudioBytes) {
+    return true;
   }
+
+  const size_t growCapacity = audioBufferCapacity + static_cast<size_t>(AUDIO_CHUNK_SIZE) * 64;
+  const size_t nextCapacity = requiredAudioBytes > growCapacity ? requiredAudioBytes : growCapacity;
+  const size_t allocationSize = nextCapacity + WAV_HEADER_SIZE;
+  uint8_t* nextBuffer = nullptr;
+
+  if (audioBuffer == nullptr) {
+    nextBuffer = reinterpret_cast<uint8_t*>(heap_caps_malloc(allocationSize, MALLOC_CAP_SPIRAM));
+  } else {
+    nextBuffer = reinterpret_cast<uint8_t*>(
+      heap_caps_realloc(audioBuffer, allocationSize, MALLOC_CAP_SPIRAM));
+  }
+
+  if (nextBuffer == nullptr) {
+    Serial.printf("[Mic] PSRAM audio buffer resize FAILED (%u bytes)\n",
+      static_cast<unsigned>(allocationSize));
+    return false;
+  }
+
+  audioBuffer = nextBuffer;
+  audioBufferCapacity = nextCapacity;
+  Serial.printf("[Mic] PSRAM audio buffer capacity: %u bytes audio\n",
+    static_cast<unsigned>(audioBufferCapacity));
+  return true;
+}
+
+void ensureAudioBuffer() {
+  ensureAudioCapacity(AMBIENT_MAX_AUDIO);
 }
 
 bool captureRecordedAudioSnapshot(MicrophoneSnapshot& snapshot) {
@@ -1422,40 +1440,29 @@ void beginRecording() {
 void captureAudioLoop() {
   if (!recording) return;
 
-  // Button-hold recordings cap at 5s (CONSULT_MAX_AUDIO), not 20s
-  const size_t maxBytes = CONSULT_MAX_AUDIO;
-  const size_t remaining = maxBytes - recordedBytes;
-  if (remaining == 0) {
+  if (!ensureAudioCapacity(recordedBytes + AUDIO_CHUNK_SIZE)) {
     recording = false;
     return;
   }
 
-  const size_t bytesToRead = min<size_t>(AUDIO_CHUNK_SIZE, remaining);
   size_t bytesRead = microphoneI2S.readBytes(
     reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes),
-    bytesToRead);
+    AUDIO_CHUNK_SIZE);
   if (bytesRead > 0) {
     recordedBytes += bytesRead;
-  }
-
-  if (recordedBytes >= maxBytes ||
-      millis() - recordStartMs >= CONSULT_RECORD_SECONDS * 1000UL) {
-    recording = false;
   }
 }
 
 void captureAudioForMs(uint32_t durationMs) {
   const unsigned long startedAt = millis();
-  while (millis() - startedAt < durationMs && recordedBytes < MAX_AUDIO_BYTES) {
-    const size_t remaining = MAX_AUDIO_BYTES - recordedBytes;
-    if (remaining == 0) {
+  while (millis() - startedAt < durationMs) {
+    if (!ensureAudioCapacity(recordedBytes + AUDIO_CHUNK_SIZE)) {
       break;
     }
 
-    const size_t bytesToRead = min<size_t>(AUDIO_CHUNK_SIZE, remaining);
     const size_t bytesRead = microphoneI2S.readBytes(
       reinterpret_cast<char*>(audioBuffer + WAV_HEADER_SIZE + recordedBytes),
-      bytesToRead);
+      AUDIO_CHUNK_SIZE);
     if (bytesRead > 0) {
       recordedBytes += bytesRead;
     }
