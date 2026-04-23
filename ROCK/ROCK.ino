@@ -39,12 +39,12 @@ void processNaraUiPipelineResult();
 void naraUiCapturePipelineTask(void* parameter);
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
-constexpr char DEFAULT_WIFI_SSID[] = "caroline";
+constexpr char DEFAULT_WIFI_SSID[] = "datadrifter";
 constexpr char LEGACY_DEFAULT_WIFI_SSID[] = "Tim Apple Iphone";
-constexpr char PRIOR_DEFAULT_WIFI_SSID[] = "Tim Apple iPhone";
+constexpr char PRIOR_DEFAULT_WIFI_SSID[] = "caroline";
 constexpr char SESSION_DEFAULT_WIFI_SSID[] = "Towards The Sun";
-constexpr char DEFAULT_WIFI_PASSWORD[] = "caroline#1";
-constexpr char PRIOR_DEFAULT_WIFI_PASSWORD[] = "thesameasyours";
+constexpr char DEFAULT_WIFI_PASSWORD[] = "carsive3";
+constexpr char PRIOR_DEFAULT_WIFI_PASSWORD[] = "caroline#1";
 constexpr char SESSION_DEFAULT_WIFI_PASSWORD[] = "gsdgsdgsd";
 constexpr char DEFAULT_OPENAI_BASE_URL[] = "https://api.openai.com";
 constexpr char DEFAULT_OPENAI_MODEL[] = "gpt-4.1-nano";
