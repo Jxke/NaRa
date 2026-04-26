@@ -34,6 +34,7 @@ const DEEPGRAM_URL =
   "&smart_format=true" +
   "&language=en-US";
 
+const ERROR_GLYPH_ID = "error";
 const EMERGENCY_FALLBACK_GLYPHS: readonly string[] = ["venture", "clarity", "bond"];
 const FALLBACK_WORD_POOL: readonly string[] = [
   "reflect",
@@ -103,11 +104,18 @@ interface GlyphRow {
   tags: string[];
   interpretations: string[];
   prompt_questions: string[];
+  is_selectable?: boolean;
 }
 
 interface PickerResult {
   glyphs: string[];
   word: string;
+}
+
+interface SpecialGlyphResponse {
+  glyphs: string[];
+  word: string;
+  reasoning: string;
 }
 
 interface Tier1Row {
@@ -306,6 +314,48 @@ function getWeekStart(): string {
   const monday = new Date(now);
   monday.setDate(now.getDate() - diff);
   return monday.toISOString().slice(0, 10);
+}
+
+function shouldReturnErrorGlyph(transcript: string): boolean {
+  const normalized = transcript.toLowerCase().trim().replace(/[^\w\s']/g, " ");
+  const compact = normalized.replace(/\s+/g, " ").trim();
+
+  const directAddressPatterns = [
+    /\bhow are you\b/,
+    /\bwho are you\b/,
+    /\bwhat are you\b/,
+    /\bare you (okay|real|listening|there|alive)\b/,
+    /\bcan you (help|hear|talk|tell|answer|be my)\b/,
+    /\bdo you (love|like|remember|think|feel|understand) me\b/,
+    /\bi (love|miss|need|trust) you\b/,
+    /\bthank you\b/,
+    /\byou are my (friend|buddy|companion|pal)\b/,
+    /\bwill you be my (friend|buddy|companion|pal)\b/,
+  ];
+
+  if (directAddressPatterns.some((pattern) => pattern.test(compact))) {
+    return true;
+  }
+
+  if (
+    compact.startsWith("nara ") ||
+    compact.startsWith("nara,") ||
+    compact.startsWith("hey nara") ||
+    compact.startsWith("hi nara") ||
+    compact.startsWith("hello nara")
+  ) {
+    return /\b(you|your|friend|love|think|feel|help|talk|there|hear)\b/.test(compact);
+  }
+
+  return false;
+}
+
+function buildErrorGlyphResponse(transcript: string): SpecialGlyphResponse {
+  return {
+    glyphs: [ERROR_GLYPH_ID],
+    word: "",
+    reasoning: `System-only glyph triggered because transcript personified the device: "${transcript}"`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -635,7 +685,7 @@ serve(async (req: Request) => {
       fetchContext(deviceId),
       supabase
         .from("glyphs")
-        .select("id, tags, interpretations, prompt_questions"),
+        .select("id, tags, interpretations, prompt_questions, is_selectable"),
       supabase
         .from("consultations")
         .select("glyph_ids")
@@ -660,21 +710,30 @@ serve(async (req: Request) => {
     return errorResponse("Failed to load context", 502, detail);
   }
 
-  const validGlyphIdList = glyphRows.map((g) => g.id);
+  const selectableGlyphRows = glyphRows.filter((g) => g.is_selectable !== false);
+  const validGlyphIdList = selectableGlyphRows.map((g) => g.id);
   const validGlyphIds = new Set(validGlyphIdList);
-  const glyphInventoryText = formatGlyphInventory(glyphRows);
+  const glyphInventoryText = formatGlyphInventory(selectableGlyphRows);
   const recentGlyphGuidance = formatRecentGlyphGuidance(recentGlyphRows);
+
+  const specialGlyphResponse = shouldReturnErrorGlyph(transcript)
+    ? buildErrorGlyphResponse(transcript)
+    : null;
 
   // -----------------------------------------------------------------------
   // Stage 2: Deep Reasoner
   // -----------------------------------------------------------------------
   let reasoning: string;
 
-  try {
-    reasoning = await runDeepReasoner(contextBlock, transcript);
-  } catch (err: unknown) {
-    const detail = err instanceof Error ? err.message : "Reasoner failed";
-    return errorResponse("Deep Reasoner failed", 502, detail);
+  if (specialGlyphResponse !== null) {
+    reasoning = specialGlyphResponse.reasoning;
+  } else {
+    try {
+      reasoning = await runDeepReasoner(contextBlock, transcript);
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : "Reasoner failed";
+      return errorResponse("Deep Reasoner failed", 502, detail);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -683,59 +742,64 @@ serve(async (req: Request) => {
   let selectedGlyphs: string[];
   let selectedWord: string;
 
-  try {
-    // First attempt
-    let { pickerResult, validationError } = normalizeAndValidatePickerResult(
-      await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance),
-      validGlyphIdList,
-    );
+  if (specialGlyphResponse !== null) {
+    selectedGlyphs = specialGlyphResponse.glyphs;
+    selectedWord = specialGlyphResponse.word;
+  } else {
+    try {
+      // First attempt
+      let { pickerResult, validationError } = normalizeAndValidatePickerResult(
+        await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance),
+        validGlyphIdList,
+      );
 
-    if (validationError !== null) {
-      // Retry once with stricter prompt
+      if (validationError !== null) {
+        // Retry once with stricter prompt
+        const retryHint =
+          "IMPORTANT: You must select exactly 3 different valid glyph IDs " +
+          "from the list. Your previous response was invalid.";
+
+        try {
+          ({ pickerResult, validationError } = normalizeAndValidatePickerResult(
+            await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance, retryHint),
+            validGlyphIdList,
+          ));
+        } catch {
+          validationError = "Retry also failed to parse";
+        }
+      }
+
+      if (validationError !== null) {
+        // Fallback: choose from the full live glyph inventory.
+        selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
+        selectedWord = fallbackWordSelection(transcript);
+      } else {
+        selectedGlyphs = repairGlyphSelection(pickerResult.glyphs, validGlyphIdList);
+        selectedWord = pickerResult.word;
+      }
+    } catch {
+      // First attempt threw (e.g. JSON parse error) — try retry
       const retryHint =
         "IMPORTANT: You must select exactly 3 different valid glyph IDs " +
         "from the list. Your previous response was invalid.";
 
       try {
-        ({ pickerResult, validationError } = normalizeAndValidatePickerResult(
+        const { pickerResult: retryResult, validationError: retryError } = normalizeAndValidatePickerResult(
           await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance, retryHint),
           validGlyphIdList,
-        ));
+        );
+
+        if (retryError !== null) {
+          selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
+          selectedWord = fallbackWordSelection(transcript);
+        } else {
+          selectedGlyphs = repairGlyphSelection(retryResult.glyphs, validGlyphIdList);
+          selectedWord = retryResult.word;
+        }
       } catch {
-        validationError = "Retry also failed to parse";
-      }
-    }
-
-    if (validationError !== null) {
-      // Fallback: choose from the full live glyph inventory.
-      selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
-      selectedWord = fallbackWordSelection(transcript);
-    } else {
-      selectedGlyphs = repairGlyphSelection(pickerResult.glyphs, validGlyphIdList);
-      selectedWord = pickerResult.word;
-    }
-  } catch {
-    // First attempt threw (e.g. JSON parse error) — try retry
-    const retryHint =
-      "IMPORTANT: You must select exactly 3 different valid glyph IDs " +
-      "from the list. Your previous response was invalid.";
-
-    try {
-      const { pickerResult: retryResult, validationError: retryError } = normalizeAndValidatePickerResult(
-        await runGlyphPicker(reasoning, glyphInventoryText, recentGlyphGuidance, retryHint),
-        validGlyphIdList,
-      );
-
-      if (retryError !== null) {
         selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
         selectedWord = fallbackWordSelection(transcript);
-      } else {
-        selectedGlyphs = repairGlyphSelection(retryResult.glyphs, validGlyphIdList);
-        selectedWord = retryResult.word;
       }
-    } catch {
-      selectedGlyphs = fallbackGlyphSelection(validGlyphIdList);
-      selectedWord = fallbackWordSelection(transcript);
     }
   }
 
@@ -750,7 +814,7 @@ serve(async (req: Request) => {
       device_id: deviceId,
       query_transcript: transcript,
       glyph_ids: selectedGlyphs,
-      word: selectedWord,
+      word: selectedWord.length > 0 ? selectedWord : null,
       reasoning,
       latency_ms: latencyMs,
     })

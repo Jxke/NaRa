@@ -111,6 +111,7 @@ create table if not exists public.glyphs (
   tags            text[] not null default '{}',
   interpretations text[] not null default '{}',
   prompt_questions text[] not null default '{}',
+  is_selectable   boolean not null default true,
   bitmap_url      text,
   created_at      timestamptz not null default now()
 );

@@ -10,6 +10,8 @@ This repo targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running the Nara hand
 
 The old UNO Q / Debian-side flow is obsolete here.
 
+This repo is wired for the hosted Supabase project `tsblsjjlrjnllsqyusmb` by default. Running `supabase start` locally is optional and not required for normal firmware provisioning or hosted edge-function testing.
+
 ## Target Board
 
 - Arduino FQBN base: `esp32:esp32:esp32s3`
@@ -215,7 +217,7 @@ Installed during integration:
   - current glyph migrations applied
   - current `seed.sql` glyph inventory applied
   - updated `consult` function deployed
-- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 42-glyph inventory
+- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 43-glyph inventory, including a system-only `error` glyph excluded from normal reflection picks
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
 - Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs

@@ -1,10 +1,10 @@
 -- seed.sql
--- Seed data for the 42 NaRa glyphs
+-- Seed data for the 43 NaRa glyphs
 -- Meaning emerges through tags, interpretations, and prompt questions.
 
 delete from public.glyphs;
 
-insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_url) values
+insert into public.glyphs (id, tags, interpretations, prompt_questions, is_selectable, bitmap_url) values
 (
   'venture',
   array['beginnings', 'leap of faith', 'becoming', 'unfolding'],
@@ -19,6 +19,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What beginning needs care?',
     'What is quietly starting in your life right now?'
   ],
+  true,
   'glyphs/venture.bmp'
 ),
 (
@@ -34,6 +35,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is your attention naturally returning?',
     'What feels like it''s coming into alignment?'
   ],
+  true,
   'glyphs/manifestation.bmp'
 ),
 (
@@ -51,6 +53,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are you picking up on something without clear evidence?',
     'What feels understood without being fully explained?'
   ],
+  true,
   'glyphs/intuition.bmp'
 ),
 (
@@ -68,6 +71,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is growth happening gradually over time?',
     'What feels supported by its environment?'
   ],
+  true,
   'glyphs/abundance.bmp'
 ),
 (
@@ -85,6 +89,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is effort being applied repeatedly?',
     'What feels shaped through control or direction?'
   ],
+  true,
   'glyphs/structure.bmp'
 ),
 (
@@ -102,6 +107,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are you following an existing model?',
     'What feels influenced by external guidance?'
   ],
+  true,
   'glyphs/conformity.bmp'
 ),
 (
@@ -118,6 +124,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where do paths begin to separate?',
     'What options share common ground before splitting?'
   ],
+  true,
   'glyphs/divergence.bmp'
 ),
 (
@@ -134,6 +141,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is your focus narrowing?',
     'What direction feels most defined?'
   ],
+  true,
   'glyphs/determination.bmp'
 ),
 (
@@ -150,6 +158,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is effort being sustained over time?',
     'What requires steady movement forward?'
   ],
+  true,
   'glyphs/courage.bmp'
 ),
 (
@@ -166,6 +175,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is your attention directed within yourself?',
     'What becomes visible through reflection?'
   ],
+  true,
   'glyphs/introspect.bmp'
 ),
 (
@@ -182,6 +192,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are small actions creating larger effects?',
     'How is momentum building from earlier steps?'
   ],
+  true,
   'glyphs/cascade.bmp'
 ),
 (
@@ -199,6 +210,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are adjustments maintaining stability?',
     'What feels carefully distributed?'
   ],
+  true,
   'glyphs/balance.bmp'
 ),
 (
@@ -216,6 +228,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where might a shift in direction occur naturally?',
     'What happens when control loosens?'
   ],
+  true,
   'glyphs/surrender.bmp'
 ),
 (
@@ -232,6 +245,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where has a change already taken place?',
     'What has moved into a new form?'
   ],
+  true,
   'glyphs/transformation.bmp'
 ),
 (
@@ -248,6 +262,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What seems to be aligning without force?',
     'Where is balance occurring through flow?'
   ],
+  true,
   'glyphs/harmony.bmp'
 ),
 (
@@ -264,6 +279,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is movement being limited?',
     'What patterns are holding something in place?'
   ],
+  true,
   'glyphs/restriction.bmp'
 ),
 (
@@ -281,6 +297,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where did stability shift quickly?',
     'What feels disrupted or interrupted?'
   ],
+  true,
   'glyphs/sudden.bmp'
 ),
 (
@@ -297,6 +314,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is care being applied gently?',
     'What is gradually being restored?'
   ],
+  true,
   'glyphs/healing.bmp'
 ),
 (
@@ -313,6 +331,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where might perception be influenced by uncertainty?',
     'What seems present but not fully defined?'
   ],
+  true,
   'glyphs/illusion.bmp'
 ),
 (
@@ -329,6 +348,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What is becoming easier to understand?',
     'Where is something coming into focus?'
   ],
+  true,
   'glyphs/clarity.bmp'
 ),
 (
@@ -345,6 +365,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What is coming into awareness?',
     'Where is attention being drawn back?'
   ],
+  true,
   'glyphs/awakening.bmp'
 ),
 (
@@ -361,6 +382,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is something reaching resolution?',
     'What seems finished or whole?'
   ],
+  true,
   'glyphs/complete.bmp'
 ),
 (
@@ -377,6 +399,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is effort accumulating gradually?',
     'What is being built through repetition?'
   ],
+  true,
   'glyphs/industry.bmp'
 ),
 (
@@ -394,6 +417,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is one phase giving way to another?',
     'What feels like a shift between chapters?'
   ],
+  true,
   'glyphs/transition.bmp'
 ),
 (
@@ -411,6 +435,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is something no longer being held?',
     'What is naturally flowing away?'
   ],
+  true,
   'glyphs/release.bmp'
 ),
 (
@@ -427,6 +452,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are opposing directions present together?',
     'How do these differences coexist?'
   ],
+  true,
   'glyphs/duality.bmp'
 ),
 (
@@ -443,6 +469,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is tension between options present?',
     'What is pulling in different directions?'
   ],
+  true,
   'glyphs/conflict.bmp'
 ),
 (
@@ -460,6 +487,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where does attention feel unfocused or diffuse?',
     'What feels partially obscured?'
   ],
+  true,
   'glyphs/clouded.bmp'
 ),
 (
@@ -477,6 +505,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is release occurring?',
     'What is moving from inside to outside?'
   ],
+  true,
   'glyphs/pour.bmp'
 ),
 (
@@ -493,6 +522,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What lies beyond this point of entry?',
     'Where does something new begin?'
   ],
+  true,
   'glyphs/threshold.bmp'
 ),
 (
@@ -509,6 +539,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is intensity present?',
     'What is being fueled or consumed?'
   ],
+  true,
   'glyphs/fire.bmp'
 ),
 (
@@ -525,6 +556,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What structure repeats across situations?',
     'How is this pattern showing up again?'
   ],
+  true,
   'glyphs/pattern.bmp'
 ),
 (
@@ -541,6 +573,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What environment creates a sense of stability?',
     'Where do you return to?'
   ],
+  true,
   'glyphs/house.bmp'
 ),
 (
@@ -557,6 +590,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is connection creating continuity?',
     'How are parts held in relation?'
   ],
+  true,
   'glyphs/bond.bmp'
 ),
 (
@@ -573,6 +607,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is something being let go?',
     'How is adaptation occurring through release?'
   ],
+  true,
   'glyphs/detachment.bmp'
 ),
 (
@@ -589,6 +624,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where are things moving together?',
     'What is shared across this group?'
   ],
+  true,
   'glyphs/unity.bmp'
 ),
 (
@@ -605,6 +641,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where does this rise and fall over time?',
     'What repeats in phases?'
   ],
+  true,
   'glyphs/cycles.bmp'
 ),
 (
@@ -621,6 +658,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where do small changes affect the whole?',
     'What links these parts beyond direct contact?'
   ],
+  true,
   'glyphs/interconnection.bmp'
 ),
 (
@@ -637,6 +675,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'Where is access being created?',
     'What is now able to enter or leave?'
   ],
+  true,
   'glyphs/opening.bmp'
 ),
 (
@@ -653,6 +692,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'How far does this extend from its origin?',
     'Where are effects spreading outward?'
   ],
+  true,
   'glyphs/ripple.bmp'
 ),
 (
@@ -669,6 +709,7 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What is being exchanged in this interaction?',
     'Where is communication shaping understanding?'
   ],
+  true,
   'glyphs/dialogue.bmp'
 ),
 (
@@ -685,5 +726,21 @@ insert into public.glyphs (id, tags, interpretations, prompt_questions, bitmap_u
     'What step comes next from here?',
     'Where is movement happening in stages?'
   ],
+  true,
   'glyphs/progression.bmp'
+),
+(
+  'error',
+  array['boundary', 'persona', 'misdirected address', 'companion mode'],
+  array[
+    'This glyph appears when the device is being addressed as though it were a person rather than used for reflection',
+    'It marks a boundary condition rather than a symbolic reading',
+    'No companion word should be shown with this glyph'
+  ],
+  array[
+    'This is a system-only glyph for personified device talk',
+    'Do not use this glyph in normal reflective consultation output'
+  ],
+  false,
+  'glyphs/error.bmp'
 );

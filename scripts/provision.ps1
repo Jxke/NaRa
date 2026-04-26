@@ -3,7 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$WifiSsid,
   [Parameter(Mandatory = $true)][string]$WifiPassword,
   [Parameter(Mandatory = $true)][string]$DeepgramApiKey,
-  [string]$SupabaseUrl,
+  [string]$SupabaseUrl = "https://tsblsjjlrjnllsqyusmb.supabase.co",
   [string]$SupabaseAnonKey,
   [string]$DeviceApiKey,
   [string]$OpenAIApiKey,
@@ -15,7 +15,7 @@ param(
 )
 
 if ([string]::IsNullOrWhiteSpace($SupabaseUrl) -and [string]::IsNullOrWhiteSpace($OpenAIApiKey)) {
-  throw "Provide either -SupabaseUrl/-DeviceApiKey for the Nara pipeline or -OpenAIApiKey for the legacy OpenAI path."
+  throw "Provide hosted Supabase credentials for the Nara pipeline or -OpenAIApiKey for the legacy OpenAI path."
 }
 
 if (-not [string]::IsNullOrWhiteSpace($SupabaseUrl) -and ([string]::IsNullOrWhiteSpace($SupabaseAnonKey) -or [string]::IsNullOrWhiteSpace($DeviceApiKey))) {

@@ -105,7 +105,7 @@ This section supersedes older notes below when they conflict.
   - migrations `00007` and `00008` were applied
   - `consult` was redeployed
   - `seed.sql` was pushed so `public.glyphs` now matches the local 42-glyph inventory
-- The current glyph dataset is 42 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
+- The current glyph dataset is 43 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
 - Firmware bitmap assets for consult glyphs are generated into [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) from `glyphs/*.bmp` using [generate_consult_glyph_header.js](/Users/carolinehana/ROCK/scripts/generate_consult_glyph_header.js).
 - Local visual reference for the consult result screen lives at [consult_preview.html](/Users/carolinehana/ROCK/consult_preview.html).
 - Visible product naming on the consult result screen is now `NARA`, but some internal identifiers and comments still use historical `Maddi` names. Treat those as implementation legacy unless a broader rename is intentionally requested.
