@@ -49,10 +49,10 @@ body {
 
 .hero {
   display: grid;
-  grid-template-columns: 62px 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 14px;
   align-items: start;
-  padding-bottom: 16px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line-strong);
   margin-bottom: 16px;
 }
@@ -62,50 +62,41 @@ body {
 .stat-label,
 .setting-copy,
 .weekly-summary,
-.hero-note,
 .activity-meta {
   font-family: "PP NeueBit", ui-monospace, monospace;
 }
 
 .eyebrow {
-  margin: 0 0 6px;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  margin: 0;
+  padding: 3px 6px 2px;
+  white-space: nowrap;
   text-transform: uppercase;
   font-size: 13px;
   line-height: 1;
   letter-spacing: 0.08em;
   color: var(--ink);
-}
-
-h1 {
-  margin: 0;
-  font-size: 40px;
-  line-height: 0.94;
-  font-weight: 400;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .hero-mark {
-  width: 62px;
-  height: 62px;
-  border: 1px solid var(--line-strong);
-  display: grid;
-  place-items: center;
-  background: var(--card);
+  position: relative;
+  width: 112px;
 }
 
 .hero-mark img {
-  width: 34px;
-  height: 34px;
+  width: 112px;
+  height: 112px;
+  display: block;
 }
 
 .hero-copy {
   min-width: 0;
-}
-
-.hero-note {
-  margin: 8px 0 0;
-  font-size: 16px;
-  line-height: 1;
-  color: var(--muted);
+  display: flex;
+  align-items: flex-start;
 }
 
 .ghost-button {
@@ -125,6 +116,7 @@ h1 {
   background: var(--ink);
   color: var(--bg);
 }
+
 
 .tabs {
   display: grid;
@@ -234,8 +226,7 @@ h1 {
 .metric-label,
 .stat-label,
 .setting-copy,
-.activity-meta,
-.hero-note {
+.activity-meta {
   color: var(--muted);
 }
 
@@ -355,6 +346,11 @@ h1 {
   margin-bottom: 18px;
   border-top: 1px solid var(--line-strong);
   padding-top: 12px;
+}
+
+.settings-group:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .settings-group:last-child {

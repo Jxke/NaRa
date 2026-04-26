@@ -431,23 +431,37 @@ function ensureModalTheme() {
 
     .nara-topline {
       display: flex;
-      gap: 12px;
       align-items: center;
+      justify-content: space-between;
       padding-bottom: 12px;
       margin-bottom: 14px;
       border-bottom: 1px solid #000;
     }
 
-    .nara-brand {
+    .nara-close {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border: 1px solid #000;
+      background: #fff;
+      color: #000;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
       font-family: "PP NeueBit", ui-monospace, monospace;
-      font-size: 18px;
+      font-size: 24px;
       line-height: 1;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      padding: 0;
+    }
+
+    .nara-close:hover {
+      background: #000;
+      color: #fff;
     }
 
     .nara-flag {
       margin-left: auto;
+      flex: 0 0 auto;
       font-family: "PP NeueBit", ui-monospace, monospace;
       font-size: 16px;
       line-height: 1;
@@ -489,6 +503,7 @@ function ensureModalTheme() {
     }
 
     .nara-actions {
+      margin-top: 10px;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
@@ -627,11 +642,7 @@ function createBlockedResponseNotice() {
   title.className = "nara-response-block__title";
   title.textContent = "Likely sycophantic response detected.";
 
-  const body = document.createElement("p");
-  body.className = "nara-response-block__body";
-  body.textContent = "This chatbot reply looked overly flattering or over-validating, so Nara hid it.";
-
-  wrapper.append(eyebrow, title, body);
+  wrapper.append(eyebrow, title);
   return wrapper;
 }
 
@@ -737,16 +748,16 @@ function sendCurrentMessage() {
 function buildModalContent(category) {
   if (category === "personal") {
     return {
-      title: "This looks personal. Would you like to talk to Nara instead?",
-      body: "Nara can help interrupt negative-emotion or personal-topic messages before they are sent to an AI chatbot.",
-      primaryLabel: "Continue to chatbot",
+      title: "This looks personal. Maybe try talking to Nara instead?",
+      body: "",
+      primaryLabel: "Continue anyway",
       secondaryLabel: "Talk to Nara"
     };
   }
 
   return {
-    title: "You're talking to this AI like a human. Consider using your device instead.",
-    body: "A short pause can help separate useful AI assistance from emotional dependence.",
+    title: "You're talking to this AI like a human. Maybe try talking to Nara instead?",
+    body: "",
     primaryLabel: "Continue anyway",
     secondaryLabel: "Talk to Nara"
   };
@@ -766,9 +777,11 @@ function showModal(category, message) {
   const topline = document.createElement("div");
   topline.className = "nara-topline";
 
-  const brand = document.createElement("div");
-  brand.className = "nara-brand";
-  brand.textContent = "Nara";
+  const closeButton = document.createElement("button");
+  closeButton.className = "nara-close";
+  closeButton.type = "button";
+  closeButton.setAttribute("aria-label", "Close warning");
+  closeButton.textContent = "×";
 
   const badge = document.createElement("div");
   badge.className = `nara-flag ${category === "anthropomorphization" ? "is-anthro" : ""}`;
@@ -807,13 +820,17 @@ function showModal(category, message) {
     safeSendMessage({ type: "nara:close-tab" });
   });
 
+  closeButton.addEventListener("click", () => {
+    removeModal();
+  });
+
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) {
       removeModal();
     }
   });
 
-  topline.append(brand, badge);
+  topline.append(closeButton, badge);
   actions.append(primaryButton, secondaryButton);
   dialog.append(topline, title, body, preview, actions);
   overlay.append(dialog);
