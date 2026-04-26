@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nara</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <div class="hero-mark">
+            <p class="eyebrow">Guardrail Layer</p>
+            <img src="assets/nara/nara_logo.png" alt="Nara logo" />
+          </div>
+        </div>
+        <button id="clearBadgeButton" class="ghost-button">Clear Badge</button>
+      </header>
+
+      <nav class="tabs" aria-label="Extension sections">
+        <button class="tab is-active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="activity">Activity</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <section id="overview" class="panel is-active">
+        <div class="metric-card">
+          <div class="metric-leading">
+            <span class="metric-icon">◌</span>
+            <span class="metric-stamp">Guardrail count</span>
+          </div>
+          <div class="metric-content">
+            <p class="metric-label">Total interventions</p>
+            <p id="totalInterventions" class="metric-value">0</p>
+          </div>
+        </div>
+
+        <p id="weeklySummary" class="weekly-summary">0 interventions this week</p>
+
+        <div class="stats-grid">
+          <article class="stat">
+            <p class="stat-label">Personal</p>
+            <p id="personalCount" class="stat-value">0</p>
+          </article>
+          <article class="stat">
+            <p class="stat-label">Anthropomorphization</p>
+            <p id="anthroCount" class="stat-value">0</p>
+          </article>
+        </div>
+
+        <div class="stats-row-single">
+          <article class="stat stat-solo">
+            <p class="stat-label">Sycophancy</p>
+            <p id="sycophanticCount" class="stat-value">0</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="activity" class="panel">
+        <div id="activityList" class="activity-list"></div>
+      </section>
+
+      <section id="settings" class="panel">
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <p class="settings-group-title">Detection Rules</p>
+            <p class="settings-group-copy">Choose which interaction patterns Nara should intercept.</p>
+          </div>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Personal Topic Detection</p>
+              <p class="setting-copy">Flags emotional, relational, or mental-health leaning prompts.</p>
+            </div>
+            <input id="personalToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Anthropomorphization Detection</p>
+              <p class="setting-copy">Flags human-like attachment language aimed at the chatbot.</p>
+            </div>
+            <input id="anthroToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Sycophantic Response Detection</p>
+              <p class="setting-copy">Blocks chatbot replies that flatter, over-validate, or mirror judgment too eagerly.</p>
+            </div>
+            <input id="sycophanticToggle" class="setting-toggle" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <p class="settings-group-title">Chatbots</p>
+            <p class="settings-group-copy">Choose which chatbot surfaces Nara should monitor.</p>
+          </div>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">ChatGPT</p>
+              <p class="setting-copy">Enable Nara guardrails on ChatGPT.</p>
+            </div>
+            <input id="chatgptToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Claude</p>
+              <p class="setting-copy">Enable Nara guardrails on Claude.</p>
+            </div>
+            <input id="claudeToggle" class="setting-toggle" type="checkbox" />
+          </label>
+
+          <label class="setting-row">
+            <div>
+              <p class="setting-title">Gemini</p>
+              <p class="setting-copy">Enable Nara guardrails on Gemini.</p>
+            </div>
+            <input id="geminiToggle" class="setting-toggle" type="checkbox" />
+          </label>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

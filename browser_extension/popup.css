@@ -1,0 +1,449 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --line: rgba(0, 0, 0, 0.18);
+  --line-strong: #000000;
+  --line-faint: rgba(0, 0, 0, 0.07);
+  --ink: #000000;
+  --muted: rgba(0, 0, 0, 0.62);
+  --faded: rgba(0, 0, 0, 0.5);
+}
+
+@font-face {
+  font-family: "PP Mondwest";
+  src: url("assets/fonts/pp/PPMondwest-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PP NeueBit";
+  src: url("assets/fonts/pp/PPNeueBit-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 392px;
+  min-height: 540px;
+  font-family: "PP Mondwest", ui-serif, Georgia, serif;
+  background:
+    linear-gradient(var(--line-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-faint) 1px, transparent 1px),
+    var(--bg);
+  background-size: 18px 18px, 18px 18px, auto;
+  color: var(--ink);
+}
+
+.shell {
+  padding: 18px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-strong);
+  margin-bottom: 16px;
+}
+
+.eyebrow,
+.metric-label,
+.stat-label,
+.setting-copy,
+.weekly-summary,
+.activity-meta {
+  font-family: "PP NeueBit", ui-monospace, monospace;
+}
+
+.eyebrow {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  margin: 0;
+  padding: 3px 6px 2px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.hero-mark {
+  position: relative;
+  width: 112px;
+}
+
+.hero-mark img {
+  width: 112px;
+  height: 112px;
+  display: block;
+}
+
+.hero-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.ghost-button {
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink);
+  padding: 10px 12px 8px;
+  cursor: pointer;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ghost-button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  margin-bottom: 16px;
+  border: 1px solid var(--line-strong);
+}
+
+.tab {
+  border: 0;
+  border-right: 1px solid var(--line-strong);
+  background: var(--card);
+  padding: 11px 8px 9px;
+  cursor: pointer;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.tab:last-child {
+  border-right: 0;
+}
+
+.tab.is-active {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.panel {
+  display: none;
+}
+
+.panel.is-active {
+  display: block;
+}
+
+.panel-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-kicker {
+  margin: 0;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 15px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-rule {
+  flex: 1;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.metric-card,
+.stat,
+.setting-row,
+.activity-item,
+.empty-state {
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+}
+
+.metric-card {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  padding: 14px;
+  gap: 14px;
+}
+
+.metric-leading {
+  border-right: 1px dashed var(--line-strong);
+  padding-right: 14px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.metric-stamp {
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 15px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-content {
+  min-width: 0;
+}
+
+.metric-icon {
+  display: inline-block;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 40px;
+  line-height: 0.9;
+}
+
+.metric-label,
+.stat-label,
+.setting-copy,
+.activity-meta {
+  color: var(--muted);
+}
+
+.metric-label,
+.stat-label {
+  margin: 0 0 4px;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-value,
+.stat-value {
+  margin: 0;
+  font-family: "PP Mondwest", ui-serif, Georgia, serif;
+  font-size: 44px;
+  line-height: 0.95;
+  font-weight: 400;
+}
+
+.weekly-summary {
+  margin: 12px 0 14px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stats-row-single {
+  display: flex;
+  justify-content: center;
+}
+
+.stat {
+  padding: 14px;
+}
+
+.stat:first-child {
+  border-width: 2px;
+}
+
+.stat:nth-child(2) {
+  border-style: dashed;
+}
+
+.stat-solo {
+  width: min(176px, 100%);
+  text-align: center;
+  border-top-width: 2px;
+  border-style: dotted;
+  border-left-width: 2px;
+  border-right-width: 2px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-item {
+  padding: 14px;
+  border-left-width: 2px;
+}
+
+.activity-item.is-personal {
+  border-style: solid;
+}
+
+.activity-item.is-anthro {
+  border-style: dashed;
+}
+
+.activity-item.is-sycophantic {
+  border-left-width: 1px;
+  border-top-width: 2px;
+}
+
+.activity-type {
+  margin: 0 0 6px;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.activity-preview {
+  margin: 0 0 8px;
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.activity-meta {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.empty-state {
+  padding: 24px 18px;
+  text-align: left;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.settings-group {
+  margin-bottom: 18px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 12px;
+}
+
+.settings-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+
+.settings-group-head {
+  margin-bottom: 10px;
+}
+
+.settings-group-title {
+  margin: 0 0 6px;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.settings-group-copy {
+  margin: 0;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.setting-title {
+  margin: 0 0 6px;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 17px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.setting-copy {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.setting-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  margin: 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.setting-toggle:checked::after {
+  content: "☑";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.setting-toggle:not(:checked)::after {
+  content: "◯";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: "PP NeueBit", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+button,
+input {
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--line-strong);
+}
