@@ -25,7 +25,6 @@ const SYSTEM_PROMPT = `You are summarizing a person's recent activity from senso
 - dominant_topics (string[]): the main topics discussed or detected
 - emotional_arc (array of {hour: string, valence: string, arousal: number}): emotional trajectory over the time window
 - key_moments (array of {time: string, description: string}): notable events or utterances
-- environment_profile (object with string keys and number values representing percentages): breakdown of environment types
 - motion_summary (object with string keys and number values): summary of motion states and durations
 Be concise. Return ONLY valid JSON, no markdown fences.`;
 
@@ -52,8 +51,6 @@ function formatSignalsAsText(
     arousal: number | null;
     stress: number | null;
     motion_state: string | null;
-    environment_class: string | null;
-    ambient_events: string[] | null;
   }>
 ): string {
   return signals
@@ -66,9 +63,6 @@ function formatSignalsAsText(
       if (s.arousal != null) parts.push(`Arousal: ${s.arousal}`);
       if (s.stress != null) parts.push(`Stress: ${s.stress}`);
       if (s.motion_state) parts.push(`Motion: ${s.motion_state}`);
-      if (s.environment_class) parts.push(`Environment: ${s.environment_class}`);
-      if (s.ambient_events?.length)
-        parts.push(`Ambient: ${s.ambient_events.join(", ")}`);
       return parts.join(" | ");
     })
     .join("\n");
@@ -95,6 +89,7 @@ serve(async (req: Request) => {
     const { data: deviceRows, error: deviceError } = await supabase
       .from("tier_1_signals")
       .select("device_id")
+      .eq("speaker_label", "user_prompt")
       .gte("created_at", cutoff);
 
     if (deviceError) throw deviceError;
@@ -120,9 +115,10 @@ serve(async (req: Request) => {
       const { data: signals, error: sigError } = await supabase
         .from("tier_1_signals")
         .select(
-          "created_at, transcript, keywords, topics, emotional_valence, arousal, stress, motion_state, environment_class, ambient_events"
+          "created_at, transcript, keywords, topics, emotional_valence, arousal, stress, motion_state"
         )
         .eq("device_id", deviceId)
+        .eq("speaker_label", "user_prompt")
         .gte("created_at", cutoff)
         .order("created_at", { ascending: true });
 
@@ -142,7 +138,6 @@ serve(async (req: Request) => {
         dominant_topics?: string[];
         emotional_arc?: unknown;
         key_moments?: unknown;
-        environment_profile?: unknown;
         motion_summary?: unknown;
       };
       try {
@@ -170,7 +165,6 @@ serve(async (req: Request) => {
         dominant_topics: parsed.dominant_topics ?? [],
         emotional_arc: parsed.emotional_arc ?? [],
         key_moments: parsed.key_moments ?? [],
-        environment_profile: parsed.environment_profile ?? {},
         motion_summary: parsed.motion_summary ?? {},
       };
 
@@ -181,7 +175,6 @@ serve(async (req: Request) => {
             dominant_topics: row.dominant_topics,
             emotional_arc: row.emotional_arc,
             key_moments: row.key_moments,
-            environment_profile: row.environment_profile,
             motion_summary: row.motion_summary,
           })
           .eq("id", existing.id);

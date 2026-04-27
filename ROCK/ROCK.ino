@@ -177,6 +177,7 @@ bool buttonLastRawPressed = false;
 bool captionLoopEnabled = false;
 bool micUseRightChannel = false;
 bool drvLibraryReady = false;
+uint8_t lastWifiDisconnectReason = 0;
 uint8_t drvI2cAddress = 0;
 uint8_t mpuI2cAddress = 0;
 
@@ -198,7 +199,7 @@ enum AmbientState {
   AMB_SENDING,      // uploading to /ingest-audio
 };
 
-bool ambientCaptureEnabled = true;
+bool ambientCaptureEnabled = false;
 AmbientState ambientState = AMB_IDLE;
 unsigned long ambientNextCaptureMs = 0;
 unsigned long ambientCaptureStartMs = 0;
@@ -505,10 +506,12 @@ const char* wifiDisconnectReasonName(uint8_t reason) {
 void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      lastWifiDisconnectReason = 0;
       Serial.print("[WiFi] Associated: ");
       Serial.println(reinterpret_cast<const char*>(info.wifi_sta_connected.ssid));
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
       Serial.print("[WiFi] Disconnected, reason ");
       Serial.print(info.wifi_sta_disconnected.reason);
       Serial.print(" (");
@@ -518,6 +521,62 @@ void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     default:
       break;
   }
+}
+
+bool scanForSsid(const char* targetSsid) {
+  if (targetSsid == nullptr || targetSsid[0] == '\0') return false;
+
+  Serial.printf("[WiFi] Scanning for %s\n", targetSsid);
+  const int networkCount = WiFi.scanNetworks();
+  if (networkCount <= 0) {
+    WiFi.scanDelete();
+    Serial.println("[WiFi] Scan found no networks");
+    return false;
+  }
+
+  bool found = false;
+  for (int i = 0; i < networkCount; ++i) {
+    if (WiFi.SSID(i) == targetSsid) {
+      found = true;
+      break;
+    }
+  }
+
+  Serial.printf("[WiFi] %s %svisible\n", targetSsid, found ? "" : "not ");
+  WiFi.scanDelete();
+  return found;
+}
+
+void beginWifiConnection(
+  const String& ssid,
+  bool useEnterprise,
+  const String& password,
+  const String& identity,
+  const String& username,
+  const String& enterprisePassword,
+  const String& enterpriseMethod
+) {
+  lastWifiDisconnectReason = 0;
+  if (useEnterprise) {
+    const char* enterpriseIdentity = identity.isEmpty()
+      ? username.c_str()
+      : identity.c_str();
+    const wpa2_auth_method_t method =
+      enterpriseMethod == "ttls" ? WPA2_AUTH_TTLS : WPA2_AUTH_PEAP;
+    Serial.printf("[WiFi] Enterprise auth %s on %s\n",
+      enterpriseMethod.c_str(), ssid.c_str());
+    WiFi.begin(
+      ssid.c_str(),
+      method,
+      enterpriseIdentity,
+      username.c_str(),
+      enterprisePassword.c_str()
+    );
+    return;
+  }
+
+  Serial.printf("[WiFi] WPA2-PSK on %s\n", ssid.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
 }
 
 String truncateForDisplay(const String& input, size_t maxLen) {
@@ -919,11 +978,14 @@ bool validateConfig() {
 void printConfigTemplate() {
   Serial.print("WiFi default SSID: ");
   Serial.println(wifiSsid);
+  Serial.printf("Enterprise-first fallback: %s -> %s when SSID is not found\n",
+    DEFAULT_ENTERPRISE_WIFI_SSID,
+    DEFAULT_WIFI_SSID);
   Serial.println("Send one JSON line over serial:");
   Serial.println(
-    "{\"wifi_ssid\":\"caroline\",\"wifi_password\":\"caroline#1\","
-    "\"wifi_enterprise\":false,\"wifi_identity\":\"\",\"wifi_username\":\"\","
-    "\"wifi_enterprise_password\":\"\",\"wifi_eap_method\":\"peap\","
+    "{\"wifi_ssid\":\"Harvard Secure\",\"wifi_password\":\"caroline#1\","
+    "\"wifi_enterprise\":true,\"wifi_identity\":\"YOUR_HARVARD_IDENTITY\",\"wifi_username\":\"YOUR_HARVARD_USERNAME\","
+    "\"wifi_enterprise_password\":\"YOUR_HARVARD_PASSWORD\",\"wifi_eap_method\":\"peap\","
     "\"deepgram_api_key\":\"YOUR_DEEPGRAM_KEY\",\"deepgram_model\":\"nova-2-general\","
     "\"deepgram_language\":\"en-US\",\"supabase_url\":\"https://PROJECT.supabase.co\","
     "\"supabase_anon_key\":\"YOUR_SUPABASE_ANON_KEY\","
@@ -1022,24 +1084,42 @@ bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(false, true);
   delay(100);
-  if (wifiEnterpriseEnabled) {
-    const char* identity = wifiEnterpriseIdentity.isEmpty()
-      ? wifiEnterpriseUsername.c_str()
-      : wifiEnterpriseIdentity.c_str();
-    const wpa2_auth_method_t method =
-      wifiEnterpriseMethod == "ttls" ? WPA2_AUTH_TTLS : WPA2_AUTH_PEAP;
-    Serial.printf("[WiFi] Enterprise auth %s on %s\n",
-      wifiEnterpriseMethod.c_str(), wifiSsid.c_str());
-    WiFi.begin(
-      wifiSsid.c_str(),
-      method,
-      identity,
-      wifiEnterpriseUsername.c_str(),
-      wifiEnterprisePassword.c_str()
-    );
-  } else {
-    WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+
+  String targetSsid = wifiSsid;
+  bool targetEnterprise = wifiEnterpriseEnabled;
+  String targetPassword = wifiPassword;
+  String targetIdentity = wifiEnterpriseIdentity;
+  String targetUsername = wifiEnterpriseUsername;
+  String targetEnterprisePassword = wifiEnterprisePassword;
+  String targetEnterpriseMethod = wifiEnterpriseMethod;
+
+  const bool prefersHarvardFallback =
+    wifiEnterpriseEnabled &&
+    (wifiSsid.isEmpty() || wifiSsid == DEFAULT_ENTERPRISE_WIFI_SSID);
+
+  if (prefersHarvardFallback && !scanForSsid(DEFAULT_ENTERPRISE_WIFI_SSID)) {
+    Serial.printf("[WiFi] Falling back to %s because %s was not found\n",
+      DEFAULT_WIFI_SSID,
+      DEFAULT_ENTERPRISE_WIFI_SSID);
+    targetSsid = DEFAULT_WIFI_SSID;
+    targetEnterprise = false;
+    targetPassword = DEFAULT_WIFI_PASSWORD;
+    targetIdentity = "";
+    targetUsername = "";
+    targetEnterprisePassword = "";
+    targetEnterpriseMethod = "peap";
   }
+
+  beginWifiConnection(
+    targetSsid,
+    targetEnterprise,
+    targetPassword,
+    targetIdentity,
+    targetUsername,
+    targetEnterprisePassword,
+    targetEnterpriseMethod
+  );
+
   Serial.print("[WiFi] Connecting");
   for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; ++i) {
     delay(250);
@@ -1047,6 +1127,32 @@ bool connectWifi() {
   }
   Serial.println();
   wifiConnected = WiFi.status() == WL_CONNECTED;
+  if (!wifiConnected &&
+      prefersHarvardFallback &&
+      targetEnterprise &&
+      lastWifiDisconnectReason == 201) {
+    Serial.printf("[WiFi] Retrying on %s after %s was not found during association\n",
+      DEFAULT_WIFI_SSID,
+      DEFAULT_ENTERPRISE_WIFI_SSID);
+    WiFi.disconnect(false, true);
+    delay(100);
+    beginWifiConnection(
+      String(DEFAULT_WIFI_SSID),
+      false,
+      String(DEFAULT_WIFI_PASSWORD),
+      "",
+      "",
+      "",
+      "peap"
+    );
+    Serial.print("[WiFi] Reconnecting");
+    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; ++i) {
+      delay(250);
+      Serial.print(".");
+    }
+    Serial.println();
+    wifiConnected = WiFi.status() == WL_CONNECTED;
+  }
   if (wifiConnected) {
     Serial.print("[WiFi] IP: ");
     Serial.println(WiFi.localIP());
@@ -1877,15 +1983,7 @@ void maddiIngest() {
   }
   http.addHeader("X-Motion-State", motionState);
 
-  // Send on-device YAMNet classification results
-  if (yamnetReady && lastClassification.confidence > 0) {
-    http.addHeader("X-Environment-Class", lastEnvironmentLabel);
-    http.addHeader("X-Ambient-Events", lastAmbientEvents);
-    http.addHeader("X-YAMNet-Label", String(lastClassification.label));
-    http.addHeader("X-YAMNet-Confidence", String(lastClassification.confidence, 2));
-  }
-
-  // Send audio energy level for environment context
+  // Send audio energy level as weak support for arousal only.
   {
     const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
     const size_t count = recordedBytes / sizeof(int16_t);
@@ -3186,16 +3284,8 @@ void processAmbientStateMachine() {
         }
 
         ambientSpeechCount++;
-        Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Sending #%u...\n",
+        Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Discarding #%u\n",
           reason, durationS, recordedBytes, ambientSpeechCount);
-
-        // Run on-device YAMNet classification before sending
-        classifyAudioOnDevice();
-
-        statusLine = String("CTX ") + ambientSpeechCount;
-        renderStatusOnly();
-
-        maddiIngest();
 
         statusLine = "READY";
         renderStatusOnly();
@@ -3293,7 +3383,8 @@ void runHardwareSelfTest() {
   Serial.print("[HW] Mic channel ");
   Serial.println(micChannelName());
   printSensorSnapshot(false);
-  Serial.println("[HW] Mic stays idle until hold-to-speak or CAPTION");
+  Serial.println("[HW] Mic stays idle until hold-to-speak");
+  Serial.println("[HW] Ambient/background capture is OFF by default");
   Serial.println("[HW] Use BUZZ, SENSORS, or MONITOR ON to test IMU and haptic");
   Serial.println("[HW] Self-test complete");
 }
@@ -3789,9 +3880,10 @@ void processSerialCommands() {
     }
 
     if (line == "AMBIENT ON") {
-      ambientCaptureEnabled = true;
-      ambientNextCaptureMs = millis();
-      Serial.println("[Ambient] VAD-gated context capture ON");
+      ambientCaptureEnabled = false;
+      ambientStop();
+      recordedBytes = 0;
+      Serial.println("[Ambient] Disabled: ambient audio is not uploaded or stored");
       continue;
     }
 
@@ -3799,7 +3891,7 @@ void processSerialCommands() {
       ambientCaptureEnabled = false;
       ambientStop();
       recordedBytes = 0;
-      Serial.printf("[Ambient] Context capture OFF (cycles: %u, speech: %u)\n", ambientCycleCount, ambientSpeechCount);
+      Serial.printf("[Ambient] Background context capture OFF (cycles: %u, speech: %u)\n", ambientCycleCount, ambientSpeechCount);
       continue;
     }
 

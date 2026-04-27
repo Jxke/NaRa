@@ -4,17 +4,15 @@
  * Receives raw WAV audio from the Maddi device via HTTP POST.
  * Pipeline:
  *   1. Deepgram Nova-2 — speech-to-text (transcript, keywords, topics)
- *   2. Claude Haiku — environment + emotion classification from transcript
+ *   2. Claude Haiku — mood classification from transcript + contextual metadata
  *
- * Populates all T1 signal fields: transcript, keywords, topics,
- * environment_class, ambient_events, emotional_valence, arousal.
+ * Returns transcript and mood-related details without persisting them.
  *
  * Auth: Device API key via X-Device-Key header (see _shared/auth.ts)
  */
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { authenticateDevice } from "../_shared/auth.ts";
-import { supabase } from "../_shared/supabase.ts";
 import { chat } from "../_shared/llm.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
 
@@ -33,22 +31,18 @@ const MIN_TRANSCRIPT_LENGTH = 3;
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
 
 const CLASSIFY_PROMPT =
-  `You are analyzing audio captured by a wearable device's microphone.
-Given whatever information is available (transcript, audio level, or both), classify the environment and emotional tone.
+  `You are analyzing speech and context signals from a wearable device's microphone.
+Given whatever information is available (transcript, audio level, device motion, or both), classify only mood-related signals.
+Do NOT classify the physical environment. Do NOT infer ambient sound events. Do NOT describe surroundings.
 Return ONLY a JSON object:
 {
-  "environment_class": one of: "music", "conversation", "media", "traffic", "nature", "domestic", "work", "social", "quiet",
-  "ambient_events": array of 1-5 short descriptive labels of sounds/context (e.g. ["movie dialogue", "background music"], ["office chatter", "keyboard"], ["birds", "wind"], ["quiet room", "fan hum"]),
   "emotional_valence": one of: "positive", "neutral", "negative",
-  "arousal": number 0.0 to 1.0 (0=calm, 1=excited/agitated),
-  "audio_description": one sentence describing what's happening in the audio environment
+  "arousal": number 0.0 to 1.0 (0=calm, 1=excited/agitated)
 }
 Rules:
-- TV/movie dialogue → environment "media"
-- Song lyrics or music → environment "music"
-- Natural conversation → environment "conversation"
-- No speech but sound present → classify the likely environment from context
-- If only audio level is provided (no transcript), infer from the dB level: very quiet (<-40dB) = "quiet", moderate (-30 to -20dB) = likely indoor ambient, loud (>-15dB) = active environment
+- Use transcript content when speech is available.
+- You may use audio level and motion only as weak supporting context for energy/arousal, not to infer environment.
+- If there is not enough evidence, default to neutral valence and moderate arousal.
 Return ONLY the JSON, no explanation.`;
 
 // ── Deepgram types ──
@@ -112,11 +106,8 @@ function extractTopics(response: DeepgramResponse): string[] {
 
 // ── Classification result ──
 interface ClassifyResult {
-  environment_class: string;
-  ambient_events: string[];
   emotional_valence: string;
   arousal: number;
-  audio_description: string;
 }
 
 async function classifyAudio(
@@ -125,11 +116,8 @@ async function classifyAudio(
   motionState: string | null
 ): Promise<ClassifyResult> {
   const defaults: ClassifyResult = {
-    environment_class: "quiet",
-    ambient_events: [],
     emotional_valence: "neutral",
     arousal: 0.5,
-    audio_description: "",
   };
 
   // Build context for Claude from whatever we have
@@ -163,11 +151,8 @@ async function classifyAudio(
 
     const parsed = JSON.parse(jsonStr);
     return {
-      environment_class: parsed.environment_class ?? defaults.environment_class,
-      ambient_events: Array.isArray(parsed.ambient_events) ? parsed.ambient_events : defaults.ambient_events,
       emotional_valence: parsed.emotional_valence ?? defaults.emotional_valence,
       arousal: typeof parsed.arousal === "number" ? Math.max(0, Math.min(1, parsed.arousal)) : defaults.arousal,
-      audio_description: parsed.audio_description ?? "",
     };
   } catch (err) {
     console.log(`[Classify] Error: ${err}`);
@@ -230,68 +215,15 @@ serve(async (req: Request) => {
     ? parseFloat(req.headers.get("X-Audio-Rms-Db")!)
     : null;
 
-  // ── Read on-device YAMNet classification (if available) ──
-  const deviceEnvClass = req.headers.get("X-Environment-Class") ?? null;
-  const deviceAmbientEvents = req.headers.get("X-Ambient-Events") ?? null;
-  const deviceYamnetLabel = req.headers.get("X-YAMNet-Label") ?? null;
-  const deviceYamnetConf = req.headers.get("X-YAMNet-Confidence")
-    ? parseFloat(req.headers.get("X-YAMNet-Confidence")!)
-    : null;
-
-  // ── Step 2: Classify — use device YAMNet + Claude for transcript analysis ──
+  // ── Step 2: Classify mood-related signals only ──
   const classification = await classifyAudio(transcript, noiseFloorDb, motionState);
-
-  // Merge: device YAMNet provides sound classification, Claude provides transcript analysis
-  if (deviceEnvClass && deviceEnvClass !== "unknown") {
-    classification.environment_class = deviceEnvClass;
-  }
-  if (deviceAmbientEvents) {
-    const deviceEvents = deviceAmbientEvents.split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (deviceEvents.length > 0) {
-      // Combine device events with Claude events
-      const combined = [...new Set([...deviceEvents, ...classification.ambient_events])];
-      classification.ambient_events = combined.slice(0, 5);
-    }
-  }
-  if (deviceYamnetLabel) {
-    // Add YAMNet label to ambient events if not already there
-    if (!classification.ambient_events.includes(deviceYamnetLabel)) {
-      classification.ambient_events.unshift(deviceYamnetLabel);
-      classification.ambient_events = classification.ambient_events.slice(0, 5);
-    }
-  }
-
-  // ── Insert T1 signal ──
-  const { data, error } = await supabase
-    .from("tier_1_signals")
-    .insert({
-      device_id: deviceId,
-      transcript,
-      keywords,
-      topics,
-      emotional_valence: classification.emotional_valence,
-      arousal: classification.arousal,
-      environment_class: classification.environment_class,
-      ambient_events: classification.ambient_events,
-      noise_floor_db: noiseFloorDb,
-      motion_state: motionState,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    return new Response(
-      JSON.stringify({ error: "Failed to store signal", detail: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
 
   return new Response(
     JSON.stringify({
-      signal_id: data.id,
+      persisted: false,
       transcript,
-      environment: classification.environment_class,
-      ambient_events: classification.ambient_events,
+      keywords,
+      topics,
       emotion: classification.emotional_valence,
       arousal: classification.arousal,
     }),

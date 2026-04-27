@@ -212,6 +212,7 @@ async function fetchContext(
       .from("tier_1_signals")
       .select("transcript, keywords, topics, emotional_valence, motion_state, created_at")
       .eq("device_id", deviceId)
+      .eq("speaker_label", "user_prompt")
       .order("created_at", { ascending: false })
       .limit(5),
 
@@ -305,6 +306,23 @@ async function fetchContext(
   }
 
   return sections.join("\n\n");
+}
+
+async function storeUserPromptSignal(
+  deviceId: string,
+  transcript: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("tier_1_signals")
+    .insert({
+      device_id: deviceId,
+      transcript,
+      speaker_label: "user_prompt",
+    });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 function getWeekStart(): string {
@@ -807,6 +825,13 @@ serve(async (req: Request) => {
   // Stage 5: Save consultation and return
   // -----------------------------------------------------------------------
   const latencyMs = Math.round(performance.now() - startTime);
+
+  try {
+    await storeUserPromptSignal(deviceId, transcript);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Tier 1 insert failed";
+    return errorResponse("Failed to store user prompt signal", 500, detail);
+  }
 
   const { data: consultation, error: insertError } = await supabase
     .from("consultations")

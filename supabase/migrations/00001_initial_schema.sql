@@ -36,7 +36,7 @@ create table if not exists public.tier_1_signals (
   created_at        timestamptz not null default now()
 );
 
-comment on table public.tier_1_signals is 'Raw signal ingestion from device microphone + sensors. Short-lived (1 hour retention).';
+comment on table public.tier_1_signals is 'Short-lived raw interaction/context signals. Use speaker_label to distinguish user button-press prompts from ambient/background captures.';
 
 -- ============================================================================
 -- tier_2_daily — compressed daily summaries, retained ~1 day
