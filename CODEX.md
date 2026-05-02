@@ -97,6 +97,7 @@ This section supersedes older notes below when they conflict.
   - `/dev/cu.usbmodem1423101`
   - `/dev/cu.usbmodem1424101`
   - `/dev/cu.usbmodem21101`
+  - `/dev/cu.usbmodem1101`
 - Recent prompt work focused on getting OpenAI replies to be a single emoticon / ASCII emoticon. If future behavior seems inconsistent, inspect the active prompt and the reply post-processing path before assuming the model is ignoring instructions.
 - Backend glyph selection now uses a two-stage prompt flow in [index.ts](/Users/carolinehana/ROCK/supabase/functions/consult/index.ts):
   - `REASONER_SYSTEM_PROMPT` extracts the human situation with emphasis on emotional state, core tension, and directional pull
@@ -223,6 +224,8 @@ TEST:Say hello from the OpenAI test path
 - firmware uploaded successfully to the board
 - serial `TEST:` path works per user report
 - Wi-Fi verified connected to `caroline`
+- device was later reconfirmed on `caroline` at IP `172.20.10.9`
+- partial serial Wi-Fi reprovisioning was verified without rewriting cloud secrets
 - Nara UI flow compiled, flashed, and iterated in-session
 - Supabase consult backend scaffolding, seed data, migrations, and tests are in repo
 - consult result preview exists locally in browser form
@@ -235,5 +238,6 @@ TEST:Say hello from the OpenAI test path
 
 ## Git Context
 
-- current active branch: `Nara`
+- merged branch `Nara` into `main` with merge commit `d29e533`
+- current active branch: `main`
 - remote: `origin https://github.com/Jxke/ROCK.git`

@@ -18,7 +18,7 @@ This repo is wired for the hosted Supabase project `tsblsjjlrjnllsqyusmb` by def
 - Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
 - Board ports are host-specific and may change after reconnects.
   - Windows example: `COM9`
-  - macOS examples seen during this session: `/dev/cu.usbmodem1423101`, `/dev/cu.usbmodem1424101`
+  - macOS examples seen during this session: `/dev/cu.usbmodem1423101`, `/dev/cu.usbmodem1424101`, `/dev/cu.usbmodem1101`
 
 ## Wiring
 
@@ -118,6 +118,8 @@ Helper script:
 
 For the current Nara pipeline, the minimum cloud config is `Deepgram + Supabase URL + Supabase anon key + device API key`.
 `OpenAI` remains optional and is only needed for the legacy direct reply path.
+
+If you provision only `wifi_ssid` and `wifi_password`, the device will join Wi-Fi but remain in `LEGACY` mode until the Supabase keys are present.
 
 Use the push button on `GPIO2` for press-and-hold recording. The encoder on `GPIO8` / `GPIO3` moves through Nara UI selections and output focus.
 
@@ -220,11 +222,12 @@ Installed during integration:
 - Live Supabase project `tsblsjjlrjnllsqyusmb` now has:
   - current glyph migrations applied
   - current `seed.sql` glyph inventory applied
-  - updated `consult`, `compress-hourly`, and `ingest-audio` functions deployed
+- updated `consult`, `compress-hourly`, and `ingest-audio` functions deployed
 - prompt-only context behavior is live:
   - `/consult` stores button-press user speech into `tier_1_signals` as `speaker_label = "user_prompt"`
   - `/compress-hourly` summarizes only `user_prompt` rows
   - `/ingest-audio` no longer persists ambient/background audio
+- partial serial reprovisioning of Wi-Fi alone has been verified on-device; the most recently confirmed connection was `caroline` on `172.20.10.9`
 - The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 43-glyph inventory, including a system-only `error` glyph excluded from normal reflection picks
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
