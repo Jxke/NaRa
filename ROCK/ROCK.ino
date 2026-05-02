@@ -40,6 +40,7 @@ void naraUiCapturePipelineTask(void* parameter);
 
 constexpr char CONFIG_NAMESPACE[] = "rock_cfg";
 constexpr char DEFAULT_WIFI_SSID[] = "caroline";
+constexpr char DEFAULT_ENTERPRISE_WIFI_SSID[] = "Harvard Secure";
 constexpr char LEGACY_DEFAULT_WIFI_SSID[] = "Tim Apple Iphone";
 constexpr char PRIOR_DEFAULT_WIFI_SSID[] = "Tim Apple iPhone";
 constexpr char SESSION_DEFAULT_WIFI_SSID[] = "Towards The Sun";
@@ -92,7 +93,6 @@ constexpr uint32_t AUDIO_CHUNK_SIZE = 1024;
 constexpr unsigned long SENSOR_MONITOR_INTERVAL_MS = 1000;
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 20;
 constexpr uint32_t CAPTION_RECORD_MS = 4000;
-constexpr uint32_t HOLD_TO_SPEAK_RELEASE_TAIL_MS = 5000;
 
 // Ambient context capture — periodic 10s recordings every 60s
 constexpr uint32_t AMBIENT_RECORD_MS = 10000;        // 10s recording
@@ -146,6 +146,11 @@ String lastAmbientEvents = "";
 
 String wifiSsid = DEFAULT_WIFI_SSID;
 String wifiPassword = DEFAULT_WIFI_PASSWORD;
+bool wifiEnterpriseEnabled = false;
+String wifiEnterpriseIdentity;
+String wifiEnterpriseUsername;
+String wifiEnterprisePassword;
+String wifiEnterpriseMethod = "peap";
 String deepgramApiKey;
 String openaiApiKey;
 String openaiApiBaseUrl = DEFAULT_OPENAI_BASE_URL;
@@ -172,6 +177,7 @@ bool buttonLastRawPressed = false;
 bool captionLoopEnabled = false;
 bool micUseRightChannel = false;
 bool drvLibraryReady = false;
+uint8_t lastWifiDisconnectReason = 0;
 uint8_t drvI2cAddress = 0;
 uint8_t mpuI2cAddress = 0;
 
@@ -193,7 +199,7 @@ enum AmbientState {
   AMB_SENDING,      // uploading to /ingest-audio
 };
 
-bool ambientCaptureEnabled = true;
+bool ambientCaptureEnabled = false;
 AmbientState ambientState = AMB_IDLE;
 unsigned long ambientNextCaptureMs = 0;
 unsigned long ambientCaptureStartMs = 0;
@@ -337,6 +343,7 @@ bool naraUiRecordArmed = false;
 NaraSampleOutput naraCurrentOutput = NARA_SAMPLE_OUTPUTS[0];
 String naraCurrentWord;
 String naraCurrentGlyphs[3];
+uint8_t naraCurrentGlyphCount = 3;
 String naraUiTranscript;
 String naraUiProcessingStatus = "GLYPHS IN FLIGHT";
 String naraUiLastSpeechError;
@@ -438,6 +445,11 @@ void vibrateReplyPattern() {
 }
 
 bool hasWifiConfig() {
+  if (wifiEnterpriseEnabled) {
+    return !wifiSsid.isEmpty() &&
+           !wifiEnterpriseUsername.isEmpty() &&
+           !wifiEnterprisePassword.isEmpty();
+  }
   return !wifiSsid.isEmpty() && !wifiPassword.isEmpty();
 }
 
@@ -494,10 +506,12 @@ const char* wifiDisconnectReasonName(uint8_t reason) {
 void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      lastWifiDisconnectReason = 0;
       Serial.print("[WiFi] Associated: ");
       Serial.println(reinterpret_cast<const char*>(info.wifi_sta_connected.ssid));
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
       Serial.print("[WiFi] Disconnected, reason ");
       Serial.print(info.wifi_sta_disconnected.reason);
       Serial.print(" (");
@@ -507,6 +521,62 @@ void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     default:
       break;
   }
+}
+
+bool scanForSsid(const char* targetSsid) {
+  if (targetSsid == nullptr || targetSsid[0] == '\0') return false;
+
+  Serial.printf("[WiFi] Scanning for %s\n", targetSsid);
+  const int networkCount = WiFi.scanNetworks();
+  if (networkCount <= 0) {
+    WiFi.scanDelete();
+    Serial.println("[WiFi] Scan found no networks");
+    return false;
+  }
+
+  bool found = false;
+  for (int i = 0; i < networkCount; ++i) {
+    if (WiFi.SSID(i) == targetSsid) {
+      found = true;
+      break;
+    }
+  }
+
+  Serial.printf("[WiFi] %s %svisible\n", targetSsid, found ? "" : "not ");
+  WiFi.scanDelete();
+  return found;
+}
+
+void beginWifiConnection(
+  const String& ssid,
+  bool useEnterprise,
+  const String& password,
+  const String& identity,
+  const String& username,
+  const String& enterprisePassword,
+  const String& enterpriseMethod
+) {
+  lastWifiDisconnectReason = 0;
+  if (useEnterprise) {
+    const char* enterpriseIdentity = identity.isEmpty()
+      ? username.c_str()
+      : identity.c_str();
+    const wpa2_auth_method_t method =
+      enterpriseMethod == "ttls" ? WPA2_AUTH_TTLS : WPA2_AUTH_PEAP;
+    Serial.printf("[WiFi] Enterprise auth %s on %s\n",
+      enterpriseMethod.c_str(), ssid.c_str());
+    WiFi.begin(
+      ssid.c_str(),
+      method,
+      enterpriseIdentity,
+      username.c_str(),
+      enterprisePassword.c_str()
+    );
+    return;
+  }
+
+  Serial.printf("[WiFi] WPA2-PSK on %s\n", ssid.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
 }
 
 String truncateForDisplay(const String& input, size_t maxLen) {
@@ -816,6 +886,11 @@ void saveConfig() {
   preferences.begin(CONFIG_NAMESPACE, false);
   preferences.putString("wifi_ssid", wifiSsid);
   preferences.putString("wifi_pass", wifiPassword);
+  preferences.putBool("wifi_ent", wifiEnterpriseEnabled);
+  preferences.putString("wifi_ident", wifiEnterpriseIdentity);
+  preferences.putString("wifi_user", wifiEnterpriseUsername);
+  preferences.putString("wifi_ent_pass", wifiEnterprisePassword);
+  preferences.putString("wifi_eap_method", wifiEnterpriseMethod);
   preferences.putString("deepgram_key", deepgramApiKey);
   preferences.putString("openai_key", openaiApiKey);
   preferences.putString("openai_url", openaiApiBaseUrl);
@@ -839,6 +914,11 @@ bool loadConfig() {
   }
   wifiSsid = preferences.getString("wifi_ssid", DEFAULT_WIFI_SSID);
   wifiPassword = preferences.getString("wifi_pass", DEFAULT_WIFI_PASSWORD);
+  wifiEnterpriseEnabled = preferences.getBool("wifi_ent", false);
+  wifiEnterpriseIdentity = preferences.getString("wifi_ident", "");
+  wifiEnterpriseUsername = preferences.getString("wifi_user", "");
+  wifiEnterprisePassword = preferences.getString("wifi_ent_pass", "");
+  wifiEnterpriseMethod = preferences.getString("wifi_eap_method", "peap");
   deepgramApiKey = preferences.getString("deepgram_key", "");
   openaiApiKey = preferences.getString("openai_key", "");
   openaiApiBaseUrl = preferences.getString("openai_url", DEFAULT_OPENAI_BASE_URL);
@@ -865,6 +945,15 @@ bool loadConfig() {
     wifiPassword = DEFAULT_WIFI_PASSWORD;
     migrated = true;
   }
+  if (wifiEnterpriseEnabled && wifiSsid.isEmpty()) {
+    wifiSsid = DEFAULT_ENTERPRISE_WIFI_SSID;
+    migrated = true;
+  }
+  wifiEnterpriseMethod.toLowerCase();
+  if (wifiEnterpriseMethod != "peap" && wifiEnterpriseMethod != "ttls") {
+    wifiEnterpriseMethod = "peap";
+    migrated = true;
+  }
   if (systemPrompt.isEmpty() ||
       systemPrompt == LEGACY_DEFAULT_SYSTEM_PROMPT ||
       systemPrompt == PRIOR_DEFAULT_SYSTEM_PROMPT) {
@@ -889,9 +978,14 @@ bool validateConfig() {
 void printConfigTemplate() {
   Serial.print("WiFi default SSID: ");
   Serial.println(wifiSsid);
+  Serial.printf("Enterprise-first fallback: %s -> %s when SSID is not found\n",
+    DEFAULT_ENTERPRISE_WIFI_SSID,
+    DEFAULT_WIFI_SSID);
   Serial.println("Send one JSON line over serial:");
   Serial.println(
-    "{\"wifi_ssid\":\"caroline\",\"wifi_password\":\"caroline#1\","
+    "{\"wifi_ssid\":\"Harvard Secure\",\"wifi_password\":\"caroline#1\","
+    "\"wifi_enterprise\":true,\"wifi_identity\":\"YOUR_HARVARD_IDENTITY\",\"wifi_username\":\"YOUR_HARVARD_USERNAME\","
+    "\"wifi_enterprise_password\":\"YOUR_HARVARD_PASSWORD\",\"wifi_eap_method\":\"peap\","
     "\"deepgram_api_key\":\"YOUR_DEEPGRAM_KEY\",\"deepgram_model\":\"nova-2-general\","
     "\"deepgram_language\":\"en-US\",\"supabase_url\":\"https://PROJECT.supabase.co\","
     "\"supabase_anon_key\":\"YOUR_SUPABASE_ANON_KEY\","
@@ -911,6 +1005,11 @@ bool applyConfigJson(const String& jsonPayload) {
 
   if (doc["wifi_ssid"].is<String>()) wifiSsid = doc["wifi_ssid"].as<String>();
   if (doc["wifi_password"].is<String>()) wifiPassword = doc["wifi_password"].as<String>();
+  if (doc["wifi_enterprise"].is<bool>()) wifiEnterpriseEnabled = doc["wifi_enterprise"].as<bool>();
+  if (doc["wifi_identity"].is<String>()) wifiEnterpriseIdentity = doc["wifi_identity"].as<String>();
+  if (doc["wifi_username"].is<String>()) wifiEnterpriseUsername = doc["wifi_username"].as<String>();
+  if (doc["wifi_enterprise_password"].is<String>()) wifiEnterprisePassword = doc["wifi_enterprise_password"].as<String>();
+  if (doc["wifi_eap_method"].is<String>()) wifiEnterpriseMethod = doc["wifi_eap_method"].as<String>();
   if (doc["deepgram_api_key"].is<String>()) deepgramApiKey = doc["deepgram_api_key"].as<String>();
   if (doc["deepgram_model"].is<String>()) deepgramModel = doc["deepgram_model"].as<String>();
   if (doc["deepgram_language"].is<String>()) deepgramLanguage = doc["deepgram_language"].as<String>();
@@ -923,6 +1022,14 @@ bool applyConfigJson(const String& jsonPayload) {
   if (doc.containsKey("supabase_url")) supabaseUrl = doc["supabase_url"].as<String>();
   if (doc.containsKey("supabase_anon_key")) supabaseAnonKey = doc["supabase_anon_key"].as<String>();
   if (doc.containsKey("device_api_key")) deviceApiKey = doc["device_api_key"].as<String>();
+
+  wifiEnterpriseMethod.toLowerCase();
+  if (wifiEnterpriseEnabled && wifiSsid.isEmpty()) {
+    wifiSsid = DEFAULT_ENTERPRISE_WIFI_SSID;
+  }
+  if (wifiEnterpriseMethod != "peap" && wifiEnterpriseMethod != "ttls") {
+    wifiEnterpriseMethod = "peap";
+  }
 
   if (!hasWifiConfig()) {
     Serial.println("[Config] Missing WiFi credentials");
@@ -977,7 +1084,42 @@ bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(false, true);
   delay(100);
-  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+
+  String targetSsid = wifiSsid;
+  bool targetEnterprise = wifiEnterpriseEnabled;
+  String targetPassword = wifiPassword;
+  String targetIdentity = wifiEnterpriseIdentity;
+  String targetUsername = wifiEnterpriseUsername;
+  String targetEnterprisePassword = wifiEnterprisePassword;
+  String targetEnterpriseMethod = wifiEnterpriseMethod;
+
+  const bool prefersHarvardFallback =
+    wifiEnterpriseEnabled &&
+    (wifiSsid.isEmpty() || wifiSsid == DEFAULT_ENTERPRISE_WIFI_SSID);
+
+  if (prefersHarvardFallback && !scanForSsid(DEFAULT_ENTERPRISE_WIFI_SSID)) {
+    Serial.printf("[WiFi] Falling back to %s because %s was not found\n",
+      DEFAULT_WIFI_SSID,
+      DEFAULT_ENTERPRISE_WIFI_SSID);
+    targetSsid = DEFAULT_WIFI_SSID;
+    targetEnterprise = false;
+    targetPassword = DEFAULT_WIFI_PASSWORD;
+    targetIdentity = "";
+    targetUsername = "";
+    targetEnterprisePassword = "";
+    targetEnterpriseMethod = "peap";
+  }
+
+  beginWifiConnection(
+    targetSsid,
+    targetEnterprise,
+    targetPassword,
+    targetIdentity,
+    targetUsername,
+    targetEnterprisePassword,
+    targetEnterpriseMethod
+  );
+
   Serial.print("[WiFi] Connecting");
   for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; ++i) {
     delay(250);
@@ -985,6 +1127,32 @@ bool connectWifi() {
   }
   Serial.println();
   wifiConnected = WiFi.status() == WL_CONNECTED;
+  if (!wifiConnected &&
+      prefersHarvardFallback &&
+      targetEnterprise &&
+      lastWifiDisconnectReason == 201) {
+    Serial.printf("[WiFi] Retrying on %s after %s was not found during association\n",
+      DEFAULT_WIFI_SSID,
+      DEFAULT_ENTERPRISE_WIFI_SSID);
+    WiFi.disconnect(false, true);
+    delay(100);
+    beginWifiConnection(
+      String(DEFAULT_WIFI_SSID),
+      false,
+      String(DEFAULT_WIFI_PASSWORD),
+      "",
+      "",
+      "",
+      "peap"
+    );
+    Serial.print("[WiFi] Reconnecting");
+    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; ++i) {
+      delay(250);
+      Serial.print(".");
+    }
+    Serial.println();
+    wifiConnected = WiFi.status() == WL_CONNECTED;
+  }
   if (wifiConnected) {
     Serial.print("[WiFi] IP: ");
     Serial.println(WiFi.localIP());
@@ -1479,9 +1647,6 @@ void endRecording() {
 
 void finalizeHoldToSpeakRecording() {
   if (recording) {
-    Serial.printf("[Mic] Capturing %lu ms release tail\n",
-      static_cast<unsigned long>(HOLD_TO_SPEAK_RELEASE_TAIL_MS));
-    captureAudioForMs(HOLD_TO_SPEAK_RELEASE_TAIL_MS);
     endRecording();
   } else {
     stopMicrophone();
@@ -1818,15 +1983,7 @@ void maddiIngest() {
   }
   http.addHeader("X-Motion-State", motionState);
 
-  // Send on-device YAMNet classification results
-  if (yamnetReady && lastClassification.confidence > 0) {
-    http.addHeader("X-Environment-Class", lastEnvironmentLabel);
-    http.addHeader("X-Ambient-Events", lastAmbientEvents);
-    http.addHeader("X-YAMNet-Label", String(lastClassification.label));
-    http.addHeader("X-YAMNet-Confidence", String(lastClassification.confidence, 2));
-  }
-
-  // Send audio energy level for environment context
+  // Send audio energy level as weak support for arousal only.
   {
     const int16_t* samples = reinterpret_cast<const int16_t*>(audioBuffer + WAV_HEADER_SIZE);
     const size_t count = recordedBytes / sizeof(int16_t);
@@ -1854,6 +2011,7 @@ void maddiIngest() {
 // Returns true on success, populating glyphIds[] and consultWord
 String consultGlyphIds[3];
 String consultWord;
+uint8_t consultGlyphCount = 0;
 
 bool maddiConsult() {
   if (supabaseUrl.isEmpty() || deviceApiKey.isEmpty()) {
@@ -1904,18 +2062,21 @@ bool maddiConsult() {
   }
 
   JsonArray glyphs = doc["glyphs"];
-  if (glyphs.size() < 3) {
-    Serial.println("[Maddi] Expected 3 glyphs");
+  const size_t glyphCount = glyphs.size();
+  if (glyphCount == 0) {
+    Serial.println("[Maddi] Expected at least 1 glyph");
     return false;
   }
 
+  consultGlyphCount = static_cast<uint8_t>(min(glyphCount, static_cast<size_t>(3)));
   for (int i = 0; i < 3; i++) {
-    consultGlyphIds[i] = glyphs[i].as<String>();
+    consultGlyphIds[i] = static_cast<size_t>(i) < glyphCount ? glyphs[i].as<String>() : "";
   }
   consultWord = doc["word"].as<String>();
   int latencyMs = doc["latency_ms"] | 0;
 
-  Serial.printf("[Maddi] Glyphs: %s, %s, %s | Word: %s | Latency: %dms\n",
+  Serial.printf("[Maddi] Glyph count: %u | Glyphs: %s, %s, %s | Word: %s | Latency: %dms\n",
+    consultGlyphCount,
     consultGlyphIds[0].c_str(), consultGlyphIds[1].c_str(), consultGlyphIds[2].c_str(),
     consultWord.c_str(), latencyMs);
 
@@ -2256,14 +2417,31 @@ void renderNaraUiProcessing() {
 }
 
 void renderNaraUiOutput() {
+  const bool singleGlyphMode =
+    naraCurrentGlyphCount <= 1 ||
+    (naraCurrentGlyphs[1].length() == 0 && naraCurrentGlyphs[2].length() == 0);
+
+  if (singleGlyphMode) {
+    const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[0].c_str());
+    if (bitmap != nullptr) {
+      drawScaledConsultGlyph(16, 16, bitmap, 168, 168);
+    }
+    if (naraCurrentWord.length() > 0) {
+      display.setFont(&FreeMonoBold12pt7b);
+      drawCenteredTextLine(naraCurrentWord, 192);
+      display.setFont(&FreeMonoBold9pt7b);
+    }
+    return;
+  }
+
   display.setFont(&FreeMonoBold12pt7b);
   drawCenteredTextLine(naraCurrentWord, 192);
   display.setFont(&FreeMonoBold9pt7b);
 
-  const int16_t glyphX[3] = {0, 108, 46};
-  const int16_t glyphY[3] = {4, 4, 68};
-  const int16_t glyphW[3] = {92, 92, 100};
-  const int16_t glyphH[3] = {92, 92, 100};
+  const int16_t glyphX[3] = {3, 111, 50};
+  const int16_t glyphY[3] = {7, 7, 72};
+  const int16_t glyphW[3] = {86, 86, 92};
+  const int16_t glyphH[3] = {86, 86, 92};
 
   for (uint8_t index = 0; index < 3; index++) {
     const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[index].c_str());
@@ -2340,13 +2518,14 @@ void renderNaraUiSettings() {
 void renderNaraUiDetail() {
   const uint8_t* bitmap = lookupConsultGlyphBitmap(naraCurrentGlyphs[naraUiDetailGlyphIndex].c_str());
   if (bitmap != nullptr) {
-    drawScaledConsultGlyph(52, 56, bitmap, 96, 96);
+    drawScaledConsultGlyph(16, 16, bitmap, 168, 168);
   }
 }
 
 void setNaraCurrentOutputFromSample(const NaraSampleOutput& sample) {
   naraCurrentOutput = sample;
   naraCurrentWord = sample.word;
+  naraCurrentGlyphCount = 3;
   for (uint8_t index = 0; index < 3; index++) {
     naraCurrentGlyphs[index] = sample.glyphs[index];
   }
@@ -2354,9 +2533,16 @@ void setNaraCurrentOutputFromSample(const NaraSampleOutput& sample) {
 
 void setNaraCurrentOutputFromConsult() {
   naraCurrentWord = consultWord;
+  naraCurrentGlyphCount = consultGlyphCount > 0 ? consultGlyphCount : 1;
   for (uint8_t index = 0; index < 3; index++) {
     naraCurrentGlyphs[index] = normalizeGlyphId(consultGlyphIds[index]);
     Serial.printf("[Nara] Output glyph %u = %s\n", index, naraCurrentGlyphs[index].c_str());
+  }
+  if (naraUiOutputFocusIndex >= naraCurrentGlyphCount) {
+    naraUiOutputFocusIndex = 0;
+  }
+  if (naraUiDetailGlyphIndex >= naraCurrentGlyphCount) {
+    naraUiDetailGlyphIndex = 0;
   }
 }
 
@@ -2585,7 +2771,6 @@ void renderNaraUiScreen() {
         case NARA_UI_5A_DETAIL:
           drawNaraUiHeader("", "UI_5A");
           renderNaraUiDetail();
-          drawNaraUiFooter("ROTATE", "BACK");
           break;
       }
     } while (display.nextPage());
@@ -2844,7 +3029,7 @@ void processNaraUiTest() {
   uint8_t bucketCount = 0;
   switch (naraUiState) {
     case NARA_UI_4_OUTPUT:
-      bucketCount = 3;
+      bucketCount = max<uint8_t>(1, naraCurrentGlyphCount);
       break;
     case NARA_UI_MENU:
       bucketCount = 3;
@@ -2859,7 +3044,7 @@ void processNaraUiTest() {
       bucketCount = 4;
       break;
     case NARA_UI_5A_DETAIL:
-      bucketCount = 3;
+      bucketCount = max<uint8_t>(1, naraCurrentGlyphCount);
       break;
     default:
       break;
@@ -3099,16 +3284,8 @@ void processAmbientStateMachine() {
         }
 
         ambientSpeechCount++;
-        Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Sending #%u...\n",
+        Serial.printf("[Ambient] Recording complete (%s, %.1fs, %u bytes). Discarding #%u\n",
           reason, durationS, recordedBytes, ambientSpeechCount);
-
-        // Run on-device YAMNet classification before sending
-        classifyAudioOnDevice();
-
-        statusLine = String("CTX ") + ambientSpeechCount;
-        renderStatusOnly();
-
-        maddiIngest();
 
         statusLine = "READY";
         renderStatusOnly();
@@ -3206,7 +3383,8 @@ void runHardwareSelfTest() {
   Serial.print("[HW] Mic channel ");
   Serial.println(micChannelName());
   printSensorSnapshot(false);
-  Serial.println("[HW] Mic stays idle until hold-to-speak or CAPTION");
+  Serial.println("[HW] Mic stays idle until hold-to-speak");
+  Serial.println("[HW] Ambient/background capture is OFF by default");
   Serial.println("[HW] Use BUZZ, SENSORS, or MONITOR ON to test IMU and haptic");
   Serial.println("[HW] Self-test complete");
 }
@@ -3583,6 +3761,17 @@ void processSerialCommands() {
       Serial.print(wifiConnected ? "connected" : "disconnected");
       Serial.print(" SSID=");
       Serial.println(wifiSsid);
+      Serial.print("[Status] WiFiAuth=");
+      if (wifiEnterpriseEnabled) {
+        Serial.print("enterprise:");
+        Serial.println(wifiEnterpriseMethod);
+        Serial.print("[Status] WiFiIdentity=");
+        Serial.println(wifiEnterpriseIdentity.isEmpty() ? "(using username)" : wifiEnterpriseIdentity);
+        Serial.print("[Status] WiFiUser=");
+        Serial.println(wifiEnterpriseUsername);
+      } else {
+        Serial.println("psk");
+      }
       Serial.print("[Status] Cloud=");
       Serial.println(hasCloudConfig() ? "ready" : "missing config");
       Serial.print("[Status] Deepgram=");
@@ -3691,9 +3880,10 @@ void processSerialCommands() {
     }
 
     if (line == "AMBIENT ON") {
-      ambientCaptureEnabled = true;
-      ambientNextCaptureMs = millis();
-      Serial.println("[Ambient] VAD-gated context capture ON");
+      ambientCaptureEnabled = false;
+      ambientStop();
+      recordedBytes = 0;
+      Serial.println("[Ambient] Disabled: ambient audio is not uploaded or stored");
       continue;
     }
 
@@ -3701,7 +3891,7 @@ void processSerialCommands() {
       ambientCaptureEnabled = false;
       ambientStop();
       recordedBytes = 0;
-      Serial.printf("[Ambient] Context capture OFF (cycles: %u, speech: %u)\n", ambientCycleCount, ambientSpeechCount);
+      Serial.printf("[Ambient] Background context capture OFF (cycles: %u, speech: %u)\n", ambientCycleCount, ambientSpeechCount);
       continue;
     }
 

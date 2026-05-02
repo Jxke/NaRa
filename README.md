@@ -4,11 +4,13 @@ This repo targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running the Nara hand
 
 - INMP441 microphone capture
 - Deepgram STT
-- Supabase Edge Functions for glyph consultation and ambient context ingest
+- Supabase Edge Functions for glyph consultation and prompt-only context building
 - Waveshare 1.54" e-paper Nara UI
 - DRV2605L haptics and MPU6050 on shared I2C
 
 The old UNO Q / Debian-side flow is obsolete here.
+
+This repo is wired for the hosted Supabase project `tsblsjjlrjnllsqyusmb` by default. Running `supabase start` locally is optional and not required for normal firmware provisioning or hosted edge-function testing.
 
 ## Target Board
 
@@ -100,6 +102,8 @@ The sketch now boots with these Wi-Fi defaults unless you override them over ser
 - `wifi_ssid`: `caroline`
 - `wifi_password`: `caroline#1`
 
+The firmware also contains an enterprise-Wi-Fi path for `Harvard Secure`, but the current stable default and verified network is still `caroline`.
+
 Manual JSON format:
 
 ```json
@@ -124,9 +128,10 @@ Current interaction model:
 - hold `GPIO2` to record
 - release `GPIO2` to stop recording
 - firmware runs `Deepgram -> Supabase /consult`
+- only button-press speech is used to build rolling user context over time
 - the e-paper shows Nara listening and processing screens
 - the output screen shows 3 bitmap glyphs plus a companion word returned by the live consult pipeline
-- ambient context capture also posts audio to `/ingest-audio` when enabled
+- ambient/background audio is not uploaded to Supabase and is not stored in Supabase
 
 ## Serial Test Mode
 
@@ -184,6 +189,7 @@ Notes:
 - `SCAN` scans the I2C bus and reports idle line state.
 - `SENSORS` and `MONITOR ON` are for button, encoder, and MPU6050 checks.
 - the microphone should stay idle except during hold-to-speak or explicit caption commands
+- ambient audio is not part of the live Supabase memory pipeline
 - the current firmware keeps the older ASCII-emoticon OpenAI prompt path only for legacy test mode
 
 ## Arduino CLI Dependencies
@@ -214,8 +220,12 @@ Installed during integration:
 - Live Supabase project `tsblsjjlrjnllsqyusmb` now has:
   - current glyph migrations applied
   - current `seed.sql` glyph inventory applied
-  - updated `consult` function deployed
-- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 42-glyph inventory
+  - updated `consult`, `compress-hourly`, and `ingest-audio` functions deployed
+- prompt-only context behavior is live:
+  - `/consult` stores button-press user speech into `tier_1_signals` as `speaker_label = "user_prompt"`
+  - `/compress-hourly` summarizes only `user_prompt` rows
+  - `/ingest-audio` no longer persists ambient/background audio
+- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 43-glyph inventory, including a system-only `error` glyph excluded from normal reflection picks
 - Arduino CLI build/upload helper added
 - Serial provisioning helper added
 - Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs

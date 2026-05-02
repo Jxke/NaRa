@@ -55,17 +55,17 @@ begin
 end $$;
 
 -- ============================================================================
--- 3. Verify all 42 glyphs are seeded
+-- 3. Verify all 43 glyphs are seeded
 -- ============================================================================
 do $$
 declare
   glyph_count int;
 begin
   select count(*) into glyph_count from public.glyphs;
-  if glyph_count != 42 then
-    raise exception 'FAIL: Expected 42 glyphs, found %', glyph_count;
+  if glyph_count != 43 then
+    raise exception 'FAIL: Expected 43 glyphs, found %', glyph_count;
   end if;
-  raise notice 'PASS: 42 glyphs seeded';
+  raise notice 'PASS: 43 glyphs seeded';
 end $$;
 
 -- ============================================================================
@@ -84,6 +84,20 @@ begin
     raise exception 'FAIL: % glyphs have missing data', bad_glyphs;
   end if;
   raise notice 'PASS: All glyphs have tags, interpretations, prompt_questions, bitmap_url';
+end $$;
+
+-- ============================================================================
+-- 4b. Verify error glyph is present but excluded from normal reflection picks
+-- ============================================================================
+do $$
+declare
+  selectable boolean;
+begin
+  select is_selectable into selectable from public.glyphs where id = 'error';
+  if selectable is distinct from false then
+    raise exception 'FAIL: error glyph must exist with is_selectable = false';
+  end if;
+  raise notice 'PASS: error glyph seeded as non-selectable';
 end $$;
 
 -- ============================================================================

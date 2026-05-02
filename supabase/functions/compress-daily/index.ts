@@ -24,7 +24,6 @@ const SYSTEM_PROMPT = `You are identifying weekly patterns from daily activity s
 - recurring_topics (string[]): topics that appear repeatedly across days
 - emotional_patterns (object): trends in emotional valence and arousal over the period, e.g. {trend: string, peak_times: string[], baseline: string}
 - decision_trends (object): patterns in decisions or choices observed, e.g. {frequent_decisions: string[], avoidance_patterns: string[]}
-- environment_mood_correlations (object): how environments relate to emotional states, e.g. {home: string, work: string, transit: string}
 Focus on patterns, not individual events. Return ONLY valid JSON, no markdown fences.`;
 
 function authenticateCron(req: Request): boolean {
@@ -54,7 +53,6 @@ function formatT2AsText(row: {
   dominant_topics: string[] | null;
   emotional_arc: unknown;
   key_moments: unknown;
-  environment_profile: unknown;
   motion_summary: unknown;
 }): string {
   const sections = [`Date: ${row.date}`];
@@ -67,11 +65,6 @@ function formatT2AsText(row: {
   }
   if (row.key_moments) {
     sections.push(`Key Moments: ${JSON.stringify(row.key_moments)}`);
-  }
-  if (row.environment_profile) {
-    sections.push(
-      `Environment Profile: ${JSON.stringify(row.environment_profile)}`
-    );
   }
   if (row.motion_summary) {
     sections.push(`Motion Summary: ${JSON.stringify(row.motion_summary)}`);
@@ -99,7 +92,7 @@ serve(async (req: Request) => {
     const { data: t2Rows, error: t2Error } = await supabase
       .from("tier_2_daily")
       .select(
-        "device_id, date, dominant_topics, emotional_arc, key_moments, environment_profile, motion_summary"
+        "device_id, date, dominant_topics, emotional_arc, key_moments, motion_summary"
       )
       .eq("date", today);
 
@@ -136,7 +129,6 @@ serve(async (req: Request) => {
         recurring_topics?: string[];
         emotional_patterns?: unknown;
         decision_trends?: unknown;
-        environment_mood_correlations?: unknown;
       };
       try {
         parsed = JSON.parse(llmResult.content);
@@ -162,8 +154,6 @@ serve(async (req: Request) => {
         recurring_topics: parsed.recurring_topics ?? [],
         emotional_patterns: parsed.emotional_patterns ?? {},
         decision_trends: parsed.decision_trends ?? {},
-        environment_mood_correlations:
-          parsed.environment_mood_correlations ?? {},
       };
 
       if (existing?.id) {
@@ -173,7 +163,6 @@ serve(async (req: Request) => {
             recurring_topics: row.recurring_topics,
             emotional_patterns: row.emotional_patterns,
             decision_trends: row.decision_trends,
-            environment_mood_correlations: row.environment_mood_correlations,
           })
           .eq("id", existing.id);
         if (updateError) throw updateError;

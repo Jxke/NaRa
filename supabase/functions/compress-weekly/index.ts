@@ -80,7 +80,6 @@ function formatContextForLLM(
     recurring_topics: string[] | null;
     emotional_patterns: unknown;
     decision_trends: unknown;
-    environment_mood_correlations: unknown;
   },
   existingThemes: ExistingTheme[]
 ): string {
@@ -117,11 +116,6 @@ function formatContextForLLM(
       `Decision Trends: ${JSON.stringify(t3Row.decision_trends)}`
     );
   }
-  if (t3Row.environment_mood_correlations) {
-    sections.push(
-      `Environment-Mood Correlations: ${JSON.stringify(t3Row.environment_mood_correlations)}`
-    );
-  }
 
   return sections.join("\n");
 }
@@ -145,7 +139,7 @@ serve(async (req: Request) => {
     const { data: t3Rows, error: t3Error } = await supabase
       .from("tier_3_weekly")
       .select(
-        "device_id, recurring_topics, emotional_patterns, decision_trends, environment_mood_correlations"
+        "device_id, recurring_topics, emotional_patterns, decision_trends"
       )
       .eq("week_start", weekStart);
 

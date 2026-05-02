@@ -76,11 +76,12 @@ This section supersedes older notes below when they conflict.
 - The IMU has been verified working over serial. The haptic driver is detected over I2C, but physical motor vibration has been inconsistent and should still be validated with `BUZZ`.
 - The active consult path uses the Supabase-backed glyph pipeline when `USE_MADDI_PIPELINE = true`.
   - firmware posts recorded WAV audio to `/consult`
-  - firmware also posts ambient captures to `/ingest-audio`
   - both requests now send `Authorization`, `apikey`, and `X-Device-Key`
   - the backend returns exactly 3 glyph IDs plus 1 companion word
   - firmware stores those in `consultGlyphIds[3]` and `consultWord`
   - the final e-ink consult screen renders bitmap glyphs plus the companion word
+  - only button-press user speech contributes to rolling Supabase context
+  - ambient/background audio is not uploaded to or stored in Supabase
 - A serial `TEST:` command exists to exercise the OpenAI/display path without the microphone.
 - Serial helpers worth remembering:
   - `HELP`
@@ -105,7 +106,7 @@ This section supersedes older notes below when they conflict.
   - migrations `00007` and `00008` were applied
   - `consult` was redeployed
   - `seed.sql` was pushed so `public.glyphs` now matches the local 42-glyph inventory
-- The current glyph dataset is 42 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
+- The current glyph dataset is 43 glyphs, seeded from [seed.sql](/Users/carolinehana/ROCK/supabase/seed.sql).
 - Firmware bitmap assets for consult glyphs are generated into [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) from `glyphs/*.bmp` using [generate_consult_glyph_header.js](/Users/carolinehana/ROCK/scripts/generate_consult_glyph_header.js).
 - Local visual reference for the consult result screen lives at [consult_preview.html](/Users/carolinehana/ROCK/consult_preview.html).
 - Visible product naming on the consult result screen is now `NARA`, but some internal identifiers and comments still use historical `Maddi` names. Treat those as implementation legacy unless a broader rename is intentionally requested.
@@ -119,7 +120,7 @@ Current architecture:
 - push-to-talk input on ESP32-S3
 - INMP441 microphone capture
 - Deepgram for speech-to-text
-- Supabase Edge Functions for consultation and ambient ingest
+- Supabase Edge Functions for consultation and prompt-only context compression
 - optional OpenAI path retained only for legacy serial test mode
 - no TTS in the current design
 - Waveshare 1.54" e-paper display for captions and status
@@ -226,8 +227,13 @@ TEST:Say hello from the OpenAI test path
 - Supabase consult backend scaffolding, seed data, migrations, and tests are in repo
 - consult result preview exists locally in browser form
 - consult bitmap rendering path is implemented in firmware source
+- device reconnected to `caroline` with IP `172.20.10.8`
+- hosted Supabase functions were updated so:
+  - `/consult` writes button-press prompts into `tier_1_signals` as `speaker_label = "user_prompt"`
+  - `/compress-hourly` summarizes only `user_prompt` rows
+  - `/ingest-audio` no longer persists ambient/background audio
 
 ## Git Context
 
-- current active branch after later session work: `nara_demo`
+- current active branch: `Nara`
 - remote: `origin https://github.com/Jxke/ROCK.git`
