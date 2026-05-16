@@ -1,0 +1,26 @@
+{
+  "name": "nara",
+  "version": "1.0.0",
+  "description": "NaRa landing page built with Astro for Netlify.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jxke/NaRa.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Jxke/NaRa/issues"
+  },
+  "homepage": "https://github.com/Jxke/NaRa#readme",
+  "dependencies": {
+    "astro": "^6.3.3"
+  }
+}

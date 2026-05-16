@@ -1,0 +1,210 @@
+---
+import "../styles/global.css";
+
+const glyphs = [
+  "opening",
+  "clarity",
+  "structure",
+  "dialogue",
+  "transition",
+  "harmony",
+  "courage",
+  "illusion",
+  "error",
+];
+
+const chapters = [
+  ["01", "Need", "uncertainty creates the demand for instant resolution"],
+  ["02", "Interruption", "NaRa slows the moment before the answer arrives"],
+  ["03", "Oracle", "three glyphs and one word replace prescription"],
+  ["04", "Return", "the user re-enters the world with more agency"],
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="NaRa is a palm-sized physical digital oracle for personal reflection, cognitive sovereignty, and restrained AI."
+    />
+    <title>NaRa - ur digital oracle</title>
+  </head>
+  <body>
+    <div class="progress" aria-hidden="true"><span></span></div>
+
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="NaRa home">NaRa</a>
+      <nav aria-label="Page sections">
+        <a href="#system">System</a>
+        <a href="#glyphs">Glyphs</a>
+        <a href="#prototype">Prototype</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero panel reveal">
+        <div class="hero-copy">
+          <p class="eyebrow">☼ studio ii / 2026 / ur digital oracle</p>
+          <h1>NaRa gives you less answer, so you can hear more of yourself.</h1>
+          <p>
+            A palm-sized physical AI oracle designed to intercept moments of
+            cognitive offloading and turn them into slower, self-authored
+            reflection.
+          </p>
+        </div>
+        <figure class="hero-media">
+          <img src="/assets/nara-form.jpg" alt="Pink NaRa prototype form on a pale surface." />
+        </figure>
+      </section>
+
+      <section class="summary reveal" aria-label="Project summary">
+        <div class="summary-grid">
+          <div>
+            <p class="label">principle</p>
+            <strong>Restraint</strong>
+          </div>
+          <div>
+            <p class="label">output</p>
+            <strong>3 glyphs + 1 word</strong>
+          </div>
+          <div>
+            <p class="label">material</p>
+            <strong>Physical, private, low resolution</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="thesis panel reveal">
+        <p class="eyebrow">☾ problem space</p>
+        <h2>Instant answers feel helpful while quietly moving judgment outside the self.</h2>
+        <div class="two-col">
+          <p>
+            NaRa responds to the rise of sycophantic, prescriptive AI companions:
+            systems optimized to validate, engage, and decide on behalf of the
+            user. The project asks whether a deliberately restrained interface
+            can protect cognitive sovereignty instead of consuming it.
+          </p>
+          <p>
+            The device does not chat, store a persistent log, or offer a final
+            answer. It blocks or slows prompts that replace self-reflection, then
+            gives the user symbolic material to interpret on their own.
+          </p>
+        </div>
+      </section>
+
+      <section id="system" class="scrolly">
+        <div class="sticky-visual">
+          <div class="oracle-screen" aria-hidden="true">
+            <div class="glyph-row">
+              <span>◎</span><span>〰</span><span>○</span>
+            </div>
+            <p>OPENING</p>
+          </div>
+        </div>
+        <div class="steps">
+          {chapters.map(([number, title, copy]) => (
+            <article class="step reveal">
+              <p class="counter">{number} / 04</p>
+              <h2>{title}</h2>
+              <p>{copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section class="image-break reveal">
+        <img src="/assets/swarming-inputs.jpg" alt="Abstract swarming field used as a visual input reference." />
+        <div>
+          <p class="eyebrow">♢ input field</p>
+          <h2>Ambiguity is the feature.</h2>
+          <p>
+            NaRa uses symbolic, low-resolution imagery because interpretation is
+            the point. A glyph is not a diagnosis. It is an object for thought.
+          </p>
+        </div>
+      </section>
+
+      <section id="glyphs" class="glyph-section panel reveal">
+        <div class="section-head">
+          <p class="eyebrow">☑ glyph engine</p>
+          <h2>A visual language for productive uncertainty.</h2>
+        </div>
+        <div class="glyph-grid" aria-label="NaRa glyph samples">
+          {glyphs.map((glyph) => (
+            <figure>
+              <img src={`/assets/glyphs/${glyph}.png`} alt={`${glyph} glyph`} loading="lazy" />
+              <figcaption>{glyph}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section class="journey panel reveal">
+        <div class="section-head">
+          <p class="eyebrow">↔ user journey</p>
+          <h2>From need, to interruption, to reflection.</h2>
+        </div>
+        <img src="/assets/journey-diagram.png" alt="NaRa user journey diagram showing prompt interception and reflection flow." loading="lazy" />
+      </section>
+
+      <section id="prototype" class="prototype panel reveal">
+        <div class="product-copy">
+          <p class="eyebrow">♜ physical prototype</p>
+          <h2>A white mirror on the back of the black mirror.</h2>
+          <p>
+            The prototype reframes AI as a small, bounded object. It asks the
+            user to hold a question, wait through friction, and scroll through
+            ambiguous output before returning to their own thought.
+          </p>
+        </div>
+        <div class="product-images">
+          <img src="/assets/nara-stack.jpg" alt="Stacked pink NaRa prototype components." loading="lazy" />
+          <img src="/assets/nara-soft-blocks.jpg" alt="Soft pink prototype blocks for NaRa form exploration." loading="lazy" />
+        </div>
+      </section>
+
+      <section class="closing reveal">
+        <p class="eyebrow">∞ position</p>
+        <h2>NaRa does not resist aid in decision-making. It refuses to surrender agency over the process.</h2>
+        <a class="button" href="#top">return to oracle ↑</a>
+      </section>
+    </main>
+
+    <script>
+      const reveals = [...document.querySelectorAll(".reveal")];
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) entry.target.classList.add("is-visible");
+          });
+        },
+        { threshold: 0.18 }
+      );
+      reveals.forEach((item) => observer.observe(item));
+
+      const progress = document.querySelector(".progress span");
+      const oracleWord = document.querySelector(".oracle-screen p");
+      const oracleGlyphs = document.querySelectorAll(".glyph-row span");
+      const words = ["NEED", "PAUSE", "OPENING", "RETURN"];
+      const sets = [["?", "!", "..."], ["□", "◊", "☾"], ["◎", "〰", "○"], ["←", "☼", "→"]];
+
+      function updateScrollState() {
+        const height = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = height > 0 ? window.scrollY / height : 0;
+        progress.style.transform = `scaleX(${ratio})`;
+
+        const chapter = Math.min(3, Math.floor(ratio * 4.2));
+        oracleWord.textContent = words[chapter];
+        oracleGlyphs.forEach((glyph, index) => {
+          glyph.textContent = sets[chapter][index];
+        });
+      }
+
+      updateScrollState();
+      window.addEventListener("scroll", updateScrollState, { passive: true });
+    </script>
+  </body>
+</html>

@@ -1,7 +1,10 @@
-ambient_ai/venv/
-ambient_ai/__pycache__/
-**/__pycache__/
-*.pyc
-build/
+node_modules/
+dist/
+.astro/
+.netlify/
+.env
+.env.*
+!.env.example
+npm-debug.log*
 .DS_Store
-supabase/.temp/
+Thumbs.db
