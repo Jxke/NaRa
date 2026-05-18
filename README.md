@@ -1,84 +1,194 @@
-# ROCK
+# Nara
 
-This repo targets a `Waveshare ESP32-S3-DEV-KIT-N32R16V-M` running the Nara handheld consultation flow:
+<p align="center">
+  <img src="ROCK/nara_logo.png" alt="Nara logo" width="180" />
+</p>
 
-- INMP441 microphone capture
-- Deepgram STT
-- Supabase Edge Functions for glyph consultation and prompt-only context building
-- Waveshare 1.54" e-paper Nara UI
-- DRV2605L haptics and MPU6050 on shared I2C
+Nara is a handheld computational artifact for reflective consultation. It combines a physical ESP32-S3 device, a low-refresh e-paper interface, speech transcription, a tiered context memory, and a constrained symbolic glyph pipeline. Instead of returning conversational prose, Nara translates a spoken prompt into a small visual response: three bitmap glyphs and one companion word.
 
-The old UNO Q / Debian-side flow is obsolete here.
+The project explores how computation can operate as a design medium rather than only a representation tool. The system does not simply display generated content. It stages a full interaction loop across sensing, context formation, symbolic reasoning, visual selection, embedded rendering, and physical feedback.
 
-This repo is wired for the hosted Supabase project `tsblsjjlrjnllsqyusmb` by default. Running `supabase start` locally is optional and not required for normal firmware provisioning or hosted edge-function testing.
+## What It Does
 
-## Target Board
+1. The user holds a physical button and speaks into the device.
+2. The ESP32-S3 records a WAV buffer from an INMP441 microphone.
+3. The device sends the recording to a Supabase Edge Function.
+4. Deepgram transcribes the audio.
+5. The backend fetches recent and compressed user context from a tiered memory model.
+6. A reasoner model analyzes the user situation without selecting glyphs directly.
+7. A second model selects exactly three valid glyphs and one short companion word from the live glyph inventory.
+8. The backend validates, repairs, records, and returns the consultation result.
+9. The device renders bitmap glyphs on a Waveshare 1.54 inch e-paper display.
 
-- Arduino FQBN base: `esp32:esp32:esp32s3`
-- Flash/PSRAM profile used here: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
-- Board ports are host-specific and may change after reconnects.
-  - Windows example: `COM9`
-  - macOS examples seen during this session: `/dev/cu.usbmodem1423101`, `/dev/cu.usbmodem1424101`, `/dev/cu.usbmodem1101`
+## Design Focus
 
-## Wiring
+Nara treats digital media as a situated symbolic system. The important computational work is not only model inference, but the coordination between physical input, deliberate context capture, memory compression, constrained symbol selection, and embedded display.
 
-- INMP441 microphone
-  - `WS -> GPIO4`
-  - `SCK -> GPIO5`
-  - `SD -> GPIO6`
-- Waveshare 1.54" e-paper V2
-  - `DIN -> GPIO11`
-  - `CLK -> GPIO12`
-  - `CS -> GPIO10`
-  - `DC -> GPIO13`
-  - `RST -> GPIO14`
-  - `BUSY -> GPIO9`
-- DRV2605L + MPU6050 shared I2C
-  - `SDA -> GPIO38`
-  - `SCL -> GPIO39`
-- Momentary button
-  - `GPIO2`
-  - configured as `INPUT_PULLUP`
-  - idle = `HIGH`, pressed = `LOW`
-- Rotary encoder
-  - `CLK -> GPIO8`
-  - `DT -> GPIO3`
-- Select button
-  - `GPIO1`
-- Back button
-  - `GPIO7`
+The system is intentionally not a continuous listener. Only button-press speech is used to build rolling user context. Ambient/background audio is excluded from the live Supabase memory pipeline. This makes context an explicit interaction material: the user's remembered history is built from moments they choose to submit.
 
-If any wiring changes, update the pin constants at the top of `ROCK/ROCK.ino`.
+## Architecture
 
-## Build
-
-```powershell
-./scripts/flash.ps1
+```text
+handheld device
+  button + microphone
+  ESP32-S3 firmware
+  e-paper glyph interface
+        |
+        v
+speech-to-text
+  Deepgram transcription
+        |
+        v
+Supabase Edge Functions
+  /consult
+  /compress-hourly
+  /compress-weekly
+        |
+        v
+tiered user context
+  T1: recent user prompts
+  T2: daily summaries
+  T3: weekly patterns
+  T4: long-lived themes
+        |
+        v
+glyph consultation
+  reasoner model
+  constrained glyph picker
+  validation + fallback
+        |
+        v
+embedded output
+  3 glyph bitmaps
+  1 companion word
 ```
 
-Arduino CLI equivalent:
+Core files:
+
+- [ROCK/ROCK.ino](ROCK/ROCK.ino): ESP32-S3 firmware, recording flow, UI state machine, e-paper rendering, and consultation client
+- [supabase/functions/consult/index.ts](supabase/functions/consult/index.ts): live consultation pipeline
+- [supabase/functions/compress-hourly/index.ts](supabase/functions/compress-hourly/index.ts): T1 to T2 context compression
+- [supabase/functions/compress-weekly/index.ts](supabase/functions/compress-weekly/index.ts): higher-level pattern compression
+- [supabase/seed.sql](supabase/seed.sql): seeded glyph inventory and prompt metadata
+- [scripts/generate_consult_glyph_header.js](scripts/generate_consult_glyph_header.js): glyph bitmap header generator
+- [ROCK/consult_glyph_bitmaps.h](ROCK/consult_glyph_bitmaps.h): firmware-ready packed glyph bitmaps
+
+## Dynamic User Context
+
+Nara's context system is built as a memory hierarchy rather than a single transcript log.
+
+- `tier_1_signals`: raw, recent button-press user prompts
+- `tier_2_daily`: daily summaries of recent interaction topics, emotional arcs, and key moments
+- `tier_3_weekly`: recurring topics, emotional patterns, and decision trends
+- `tier_4_themes`: longer-lived themes with strength scores and reinforcement timestamps
+
+The `/consult` function gathers context from all tiers in parallel, formats it into a compact context block, and passes it into the reasoner model. This lets the current spoken prompt be interpreted against recent utterances, daily summaries, weekly patterns, and persistent themes.
+
+The context model is prompt-only by design. In the current live path, `/consult` stores user speech as `speaker_label = "user_prompt"`, `/compress-hourly` only summarizes those prompt rows, and ambient/background audio is not persisted into Supabase. This keeps the system's memory tied to intentional use.
+
+## Glyph Generation Pipeline
+
+Nara's output is generated through a constrained symbolic pipeline rather than direct free-form image generation.
+
+The glyph library is a seeded inventory of 43 symbolic entries. Each glyph has:
+
+- a stable text ID
+- tags
+- interpretations
+- reflective prompt questions
+- selectability metadata
+- bitmap assets for embedded display
+
+The consultation pipeline separates interpretation from selection:
+
+1. **Context fetch** gathers recent signals, daily context, weekly patterns, long-term themes, the glyph inventory, and recent glyph history.
+2. **Deep reasoner** analyzes the user's situation, focusing on emotional state, core tension, and directional pull.
+3. **Glyph picker** receives the analysis plus the valid glyph inventory and selects a meaningful trio.
+4. **Recent history guidance** downranks overused or repeated glyphs so the system does not mechanically return the same symbols.
+5. **Validation** requires exactly three unique selectable glyph IDs and a companion word under the configured length limit.
+6. **Repair and fallback** normalize legacy aliases, remove invalid IDs, retry malformed model outputs, and fall back to valid inventory choices if needed.
+7. **Storage** records the transcript, selected glyph IDs, word, reasoning, and latency.
+8. **Firmware rendering** maps returned IDs to packed bitmap arrays in program memory and draws them on the e-paper display.
+
+This creates a narrow but expressive output grammar. The model can interpret and compose, but it cannot invent arbitrary symbols outside the designed visual system.
+
+## Embedded Interface
+
+The device UI is organized around a small state machine:
+
+- logo splash
+- idle
+- listening
+- processing
+- output
+- menu
+- lexicon
+- history
+- settings
+- glyph detail
+
+The output screen renders glyphs as bitmaps, not raw IDs. A browser prototype for the UI state machine is available at [nara_ui_state_machine.html](nara_ui_state_machine.html), and a result preview tool is available at [consult_preview.html](consult_preview.html).
+
+## Hardware
+
+Target board:
+
+- Waveshare `ESP32-S3-DEV-KIT-N32R16V-M`
+- Arduino FQBN base: `esp32:esp32:esp32s3`
+- Flash/PSRAM profile: `FlashSize=32M`, `PartitionScheme=default_8MB`, `PSRAM=opi`
+
+Inputs and outputs:
+
+- INMP441 microphone for push-to-talk capture
+- Waveshare 1.54 inch e-paper V2 display
+- DRV2605L haptic driver
+- MPU6050 IMU
+- momentary record button
+- rotary encoder
+- select and back buttons
+
+Pin mapping is defined in [ROCK/ROCK.ino](ROCK/ROCK.ino). Current wiring:
+
+| Component | Pin |
+| --- | --- |
+| INMP441 WS | GPIO4 |
+| INMP441 SCK | GPIO5 |
+| INMP441 SD | GPIO6 |
+| E-paper DIN | GPIO11 |
+| E-paper CLK | GPIO12 |
+| E-paper CS | GPIO10 |
+| E-paper DC | GPIO13 |
+| E-paper RST | GPIO14 |
+| E-paper BUSY | GPIO9 |
+| I2C SDA | GPIO38 |
+| I2C SCL | GPIO39 |
+| Record button | GPIO2 |
+| Encoder CLK | GPIO8 |
+| Encoder DT | GPIO3 |
+| Select button | GPIO1 |
+| Back button | GPIO7 |
+
+## Build And Upload
+
+Compile with Arduino CLI:
 
 ```bash
 arduino-cli compile --fqbn esp32:esp32:esp32s3 ROCK
 ```
 
-## Upload
-
-```powershell
-./scripts/flash.ps1 -Upload
-```
-
-If your board is not on `COM9`, pass the correct port:
-
-```powershell
-./scripts/flash.ps1 -Upload -Port COM10
-```
-
-Arduino CLI equivalents:
+Upload to a connected board:
 
 ```bash
-arduino-cli upload -p /dev/cu.usbmodem1424101 --fqbn esp32:esp32:esp32s3 ROCK
+arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn esp32:esp32:esp32s3 ROCK
 ```
+
+On Windows, the helper script can compile and upload:
+
+```powershell
+./scripts/flash.ps1 -Upload -Port COM9
+```
+
+List available boards:
 
 ```bash
 arduino-cli board list
@@ -86,117 +196,48 @@ arduino-cli board list
 
 ## Runtime Configuration
 
-Secrets are provisioned over serial and stored in `Preferences`.
+Secrets are provisioned over serial and stored in ESP32 `Preferences`.
 
-`Preferences` is the ESP32 persistent key-value store used for:
+Required for the live Nara pipeline:
 
-- Wi-Fi SSID/password
-- Deepgram key
-- Supabase URL / anon key / device API key
-- optional OpenAI key for legacy test paths
-- model settings
-- `systemPrompt`
+- Wi-Fi credentials
+- Deepgram API key
+- Supabase URL
+- Supabase anon key
+- device API key
 
-The sketch now boots with these Wi-Fi defaults unless you override them over serial:
+Optional legacy test paths can also use OpenAI configuration values, but the primary live path is `Deepgram -> Supabase /consult -> e-paper glyph output`.
 
-- `wifi_ssid`: `caroline`
-- `wifi_password`: `caroline#1`
-
-The firmware also contains an enterprise-Wi-Fi path for `Harvard Secure`, but the current stable default and verified network is still `caroline`.
-
-Manual JSON format:
-
-```json
-{"wifi_ssid":"caroline","wifi_password":"caroline#1","deepgram_api_key":"YOUR_DEEPGRAM_KEY","deepgram_model":"nova-2-general","deepgram_language":"en-US","supabase_url":"https://tsblsjjlrjnllsqyusmb.supabase.co","supabase_anon_key":"YOUR_SUPABASE_ANON_KEY","device_api_key":"YOUR_DEVICE_API_KEY","openai_apiKey":"YOUR_OPENAI_KEY","openai_apiBaseUrl":"https://api.openai.com","openai_model":"gpt-4.1-nano","system_prompt":"You are a guide to all questions of life. Reply with exactly one ASCII emoticon and no other text. Do not use Unicode emoji. Use plain ASCII like :) :( :D :P ;) :| <3 T_T -_- ._."}
-```
-
-Helper script:
+Provisioning helper:
 
 ```powershell
-./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -SupabaseUrl "https://tsblsjjlrjnllsqyusmb.supabase.co" -SupabaseAnonKey "YOUR_SUPABASE_ANON_KEY" -DeviceApiKey "YOUR_DEVICE_API_KEY"
+./scripts/provision.ps1 -Port COM9 -WifiSsid "YOUR_WIFI" -WifiPassword "YOUR_WIFI_PASSWORD" -DeepgramApiKey "YOUR_DEEPGRAM_KEY" -SupabaseUrl "YOUR_SUPABASE_URL" -SupabaseAnonKey "YOUR_SUPABASE_ANON_KEY" -DeviceApiKey "YOUR_DEVICE_API_KEY"
 ```
 
-For the current Nara pipeline, the minimum cloud config is `Deepgram + Supabase URL + Supabase anon key + device API key`.
-`OpenAI` remains optional and is only needed for the legacy direct reply path.
+## Serial Diagnostics
 
-If you provision only `wifi_ssid` and `wifi_password`, the device will join Wi-Fi but remain in `LEGACY` mode until the Supabase keys are present.
-
-Use the push button on `GPIO2` for press-and-hold recording. The encoder on `GPIO8` / `GPIO3` moves through Nara UI selections and output focus.
-
-Current interaction model:
-
-- boot to a logo-only Nara splash
-- enter the Nara idle screen
-- hold `GPIO2` to record
-- release `GPIO2` to stop recording
-- firmware runs `Deepgram -> Supabase /consult`
-- only button-press speech is used to build rolling user context over time
-- the e-paper shows Nara listening and processing screens
-- the output screen shows 3 bitmap glyphs plus a companion word returned by the live consult pipeline
-- ambient/background audio is not uploaded to Supabase and is not stored in Supabase
-
-## Serial Test Mode
-
-The firmware still includes a serial-injected transcript path for the legacy OpenAI/display flow, but the main live path is the Nara consult pipeline.
-
-Open a terminal on the active board port at `115200`:
-
-```powershell
-arduino-cli monitor -p COM9 -c baudrate=115200
-```
-
-macOS example:
+Open a serial monitor at `115200` baud:
 
 ```bash
-arduino-cli monitor -p /dev/cu.usbmodem1424101 -c baudrate=115200
+arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200
 ```
 
-If `arduino-cli monitor` is unreliable on this USB CDC port, `screen` is often more stable:
-
-```bash
-screen /dev/cu.usbmodem1424101 115200
-```
-
-Available commands:
+Useful commands:
 
 - `HELP`
 - `STATUS`
-- `PROMPT`
-- `PROMPT DEFAULT`
-- `BUZZ[:n]`
 - `SCAN`
 - `SENSORS`
-- `MONITOR ON`
-- `MONITOR OFF`
-- `CAPTION`
-- `CAPTION ON`
-- `CAPTION OFF`
-- `MIC LEFT`
-- `MIC RIGHT`
+- `BUZZ`
+- `PROMPT`
+- `PROMPT DEFAULT`
 - `TEST:<message>`
 
-Example:
+`TEST:<message>` exercises the retained legacy display path without microphone capture. The primary Nara interaction remains hold-to-speak through the live consultation pipeline.
 
-```text
-TEST:Say hello from the OpenAI test path
-```
+## Dependencies
 
-This skips the microphone and Deepgram STT step, then runs the normal OpenAI request and e-paper rendering flow.
-
-Notes:
-
-- `PROMPT` prints the stored and effective system prompt.
-- `PROMPT DEFAULT` resets the stored prompt back to the firmware default.
-- `BUZZ` triggers the DRV2605L haptic effect test.
-- `SCAN` scans the I2C bus and reports idle line state.
-- `SENSORS` and `MONITOR ON` are for button, encoder, and MPU6050 checks.
-- the microphone should stay idle except during hold-to-speak or explicit caption commands
-- ambient audio is not part of the live Supabase memory pipeline
-- the current firmware keeps the older ASCII-emoticon OpenAI prompt path only for legacy test mode
-
-## Arduino CLI Dependencies
-
-Installed during integration:
+Arduino libraries used by the firmware:
 
 - `esp32:esp32`
 - `ArduinoJson`
@@ -207,32 +248,37 @@ Installed during integration:
 - `Adafruit MPU6050`
 - `Adafruit Unified Sensor`
 
-## Current Status
+Backend services:
 
-- Main ESP32-S3 sketch uses the Nara UI flow with:
-  - logo-only splash
-  - idle
-  - listening
-  - processing
-  - bitmap glyph output
-- Live consult requests send:
-  - `Authorization: Bearer <SUPABASE_ANON_KEY>`
-  - `apikey: <SUPABASE_ANON_KEY>`
-  - `X-Device-Key: <device key>`
-- Live Supabase project `tsblsjjlrjnllsqyusmb` now has:
-  - current glyph migrations applied
-  - current `seed.sql` glyph inventory applied
-- updated `consult`, `compress-hourly`, and `ingest-audio` functions deployed
-- prompt-only context behavior is live:
-  - `/consult` stores button-press user speech into `tier_1_signals` as `speaker_label = "user_prompt"`
-  - `/compress-hourly` summarizes only `user_prompt` rows
-  - `/ingest-audio` no longer persists ambient/background audio
-- partial serial reprovisioning of Wi-Fi alone has been verified on-device; the most recently confirmed connection was `caroline` on `172.20.10.9`
-- The device output view renders bitmap glyphs from [consult_glyph_bitmaps.h](/Users/carolinehana/ROCK/ROCK/consult_glyph_bitmaps.h) that match the seeded 43-glyph inventory, including a system-only `error` glyph excluded from normal reflection picks
-- Arduino CLI build/upload helper added
-- Serial provisioning helper added
-- Swift helper added for converting JPG inputs into `128x128` 8-bit BMPs
-- Serial `TEST:` mode retained for non-mic legacy OpenAI checks
-- Boot-time and live serial hardware diagnostics added
-- `DRV2605L` is detected over I2C, but physical motor vibration still needs hardware validation with `BUZZ`
-- `MPU6050` has been verified working over serial
+- Supabase database, auth, RLS, cron, and Edge Functions
+- Deepgram speech-to-text
+- LLM provider configured through the shared Edge Function client
+
+## Repository Map
+
+```text
+ROCK/
+  ROCK.ino                    firmware and Nara UI flow
+  consult_glyph_bitmaps.h     generated embedded glyph assets
+  nara_logo.png               source logo image
+  nara_logo.h                 generated e-paper logo bitmap
+
+glyphs/
+  *.png                       glyph source previews
+  *.bmp                       8-bit glyph inputs for firmware packing
+
+scripts/
+  flash.ps1                   Arduino CLI build/upload helper
+  provision.ps1               serial provisioning helper
+  generate_consult_glyph_header.js
+  generate_logo_header.swift
+  convert_to_8bit_bmp.swift
+
+supabase/
+  migrations/                 schema, RLS, device keys, glyph metadata
+  functions/                  consultation and compression functions
+  seed.sql                    glyph inventory seed data
+
+browser_extension/
+  prototype browser intervention surface
+```
