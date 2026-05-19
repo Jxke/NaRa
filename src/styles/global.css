@@ -7,6 +7,7 @@
   --faint: rgba(0, 0, 0, 0.035);
   --font-display: "PP Mondwest", Georgia, "Times New Roman", serif;
   --font-ui: "PP NeueBit", "Arial Narrow", "IBM Plex Mono", monospace;
+  --page-width: 1320px;
 }
 
 @font-face {
@@ -73,7 +74,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px clamp(18px, 4vw, 56px);
+  padding: 16px clamp(16px, 2.6vw, 44px);
   font-family: var(--font-ui);
   font-size: 12px;
   letter-spacing: 0;
@@ -107,22 +108,23 @@ main {
 .summary,
 .image-break,
 .closing {
-  width: min(1120px, calc(100% - 36px));
+  width: min(var(--page-width), calc(100% - 28px));
   margin: 0 auto;
 }
 
 .hero {
   min-height: 96svh;
   display: grid;
-  grid-template-rows: minmax(420px, 1fr) auto;
-  gap: 26px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(400px, 1.05fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 72px);
   padding-top: 98px;
 }
 
 .hero-copy {
-  align-self: center;
   max-width: 1040px;
   padding-bottom: 10px;
+  z-index: 1;
 }
 
 .eyebrow,
@@ -146,7 +148,7 @@ p {
 
 h1 {
   max-width: 1060px;
-  font-size: clamp(54px, 9vw, 128px);
+  font-size: clamp(54px, 7.4vw, 112px);
   font-weight: 400;
   line-height: 0.92;
 }
@@ -169,9 +171,12 @@ p {
 }
 
 .hero-media {
-  min-height: 30vh;
+  height: clamp(520px, 66svh, 680px);
   margin: 0;
-  border-top: 1.5px solid var(--ink);
+  align-self: center;
+  border-top: 0;
+  border-left: 1.5px solid var(--ink);
+  background: #fff;
 }
 
 .hero-media img {
@@ -230,7 +235,7 @@ strong {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(300px, 620px);
   gap: clamp(24px, 6vw, 92px);
-  width: min(1120px, calc(100% - 36px));
+  width: min(var(--page-width), calc(100% - 28px));
   margin: 0 auto;
   padding: 8vh 0;
 }
@@ -447,6 +452,7 @@ strong {
   }
 
   .summary-grid,
+  .hero,
   .two-col,
   .scrolly,
   .image-break,
@@ -462,6 +468,18 @@ strong {
 
   .summary-grid > div:last-child {
     border-bottom: 0;
+  }
+
+  .hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+
+  .hero-media {
+    height: clamp(420px, 58svh, 560px);
+    border-top: 1.5px solid var(--ink);
+    border-left: 0;
   }
 
   .sticky-visual {
@@ -512,9 +530,9 @@ strong {
   .panel,
   .summary,
   .image-break,
-  .closing,
-  .scrolly {
-    width: min(100% - 24px, 1120px);
+    .closing,
+    .scrolly {
+    width: min(100% - 24px, var(--page-width));
   }
 
   .hero {

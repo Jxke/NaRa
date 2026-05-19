@@ -21,6 +21,10 @@
   },
   "homepage": "https://github.com/Jxke/NaRa#readme",
   "dependencies": {
-    "astro": "^6.3.3"
+    "astro": "^6.3.3",
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.3.0"
   }
 }

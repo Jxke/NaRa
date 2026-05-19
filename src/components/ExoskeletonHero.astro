@@ -1,0 +1,142 @@
+---
+export interface Props {
+  leftModel?: string;
+  rightModel?: string;
+  componentsModel?: string;
+  componentsManifest?: string;
+  uiFramesBase?: string;
+  label?: string;
+}
+
+const {
+  leftModel = "/models/Exoskeleton_L.web.glb",
+  rightModel = "/models/Exoskeleton_R.web.glb",
+  componentsModel = "/models/Components.glb",
+  componentsManifest = "/models/rhino-components-web-manifest.json",
+  uiFramesBase = "/ui-frames",
+  label = "Interactive 3D view of the NaRa exoskeleton components",
+} = Astro.props;
+
+---
+
+<div
+  class="exoskeleton-hero"
+  data-left-model={leftModel}
+  data-right-model={rightModel}
+  data-components-model={componentsModel}
+  data-components-manifest={componentsManifest}
+  data-ui-frames-base={uiFramesBase}
+  role="img"
+  aria-label={label}
+>
+  <div class="exoskeleton-loading" aria-hidden="true">
+    <div class="exoskeleton-loading-bar">
+      <span class="exoskeleton-loading-fill"></span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .exoskeleton-hero {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 520px;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: pan-y;
+    background: #fff;
+  }
+
+  @media (max-width: 840px) {
+    .exoskeleton-hero {
+      min-height: 440px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .exoskeleton-hero {
+      min-height: 380px;
+    }
+  }
+
+  .exoskeleton-hero:active {
+    cursor: grabbing;
+  }
+
+  .exoskeleton-hero :global(canvas) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transform: scale(0.92);
+    transition:
+      opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .exoskeleton-hero.is-loaded :global(canvas) {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .exoskeleton-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 360ms ease;
+  }
+
+  .exoskeleton-hero.is-loaded .exoskeleton-loading {
+    opacity: 0;
+  }
+
+  .exoskeleton-loading-bar {
+    width: min(168px, 42%);
+    height: 4px;
+    overflow: hidden;
+    background: #e2e2df;
+  }
+
+  .exoskeleton-loading-fill {
+    display: block;
+    width: calc(var(--load-progress, 0) * 1%);
+    height: 100%;
+    background: #8f918d;
+    transition: width 180ms ease;
+  }
+
+  .exoskeleton-hero.has-error .exoskeleton-loading-fill {
+    background: #000;
+  }
+</style>
+
+<script>
+  const hosts = [
+    ...document.querySelectorAll(".exoskeleton-hero"),
+  ].filter((host) => !host.dataset.exoskeletonReady || !host.querySelector("canvas"));
+
+  if (hosts.length > 0) {
+    const { createExoskeletonHero } = await import("../lib/createExoskeletonHero.js");
+
+    hosts.forEach((host) => {
+      try {
+        createExoskeletonHero(host, {
+          leftModel: host.dataset.leftModel,
+          rightModel: host.dataset.rightModel,
+          componentsModel: host.dataset.componentsModel,
+          componentsManifest: host.dataset.componentsManifest,
+          uiFramesBase: host.dataset.uiFramesBase,
+        });
+        host.dataset.exoskeletonReady = "true";
+      } catch (error) {
+        console.error("Unable to initialize exoskeleton hero", error);
+        host.classList.add("has-error");
+      }
+    });
+  }
+</script>

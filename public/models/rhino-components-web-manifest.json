@@ -1,0 +1,206 @@
+﻿[
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_86389766.glb",
+        "bytes":  1908280,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_86389766.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  13767.17760064289,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "86389766-7cfc-4594-a593-cd61cd84f3fa"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_86389766",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_0c7aada2.glb",
+        "bytes":  1022548,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_0c7aada2.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  1276.8967872619644,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "0c7aada2-e87b-4dff-afce-ef8b18c60da0"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_0c7aada2",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_f1d38de5.glb",
+        "bytes":  976196,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_f1d38de5.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  3679.807923015856,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "f1d38de5-8804-41e5-b1f5-786f8cab2393"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_f1d38de5",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_38ad3775.glb",
+        "bytes":  788004,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_38ad3775.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  333.2409161695899,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "38ad3775-7cd1-443f-ad8f-485acfc4ad93"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_38ad3775",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_f0f92ec8.glb",
+        "bytes":  427424,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_f0f92ec8.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  384.91025395108693,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "f0f92ec8-0294-4512-abb6-f4b75be1267f"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_f0f92ec8",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_e6cdf430.glb",
+        "bytes":  427188,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_e6cdf430.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  384.91025395108693,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "e6cdf430-56a6-444f-aa9e-d85d093620df"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_e6cdf430",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_a8a6f2ba.glb",
+        "bytes":  426656,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_a8a6f2ba.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  384.91025395108693,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "a8a6f2ba-bf58-4c60-9223-99b4e7738a71"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_a8a6f2ba",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_9a30c988.glb",
+        "bytes":  178460,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_9a30c988.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  5533.021349018512,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "9a30c988-6102-4548-836b-ca7f658546bb"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_9a30c988",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_b8f5768a.glb",
+        "bytes":  137920,
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_b8f5768a.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  783.7726741328432,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "b8f5768a-ab8b-43c4-bf23-fc188b00e0ee"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_b8f5768a",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
+        "bytes":  156020,
+        "relativeFile":  "/models/rhino-components-optimized/block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
+        "objects":  [
+                        {
+                            "name":  "3D_PCB1_2025-03-17 v1",
+                            "bbox_volume":  871.2200093823238,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "72a1b1c8-e81d-4761-966c-7ef53762bea8"
+                        }
+                    ],
+        "key":  "block_3D_PCB1_2025-03-17_v1_72a1b1c8",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_Works_like_core_1.1_080f1173.glb",
+        "bytes":  126824,
+        "relativeFile":  "/models/rhino-components-optimized/block_Works_like_core_1.1_080f1173.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  589.0089721083665,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "080f1173-d996-4cd0-8746-44ed1b31e2dd"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_080f1173",
+        "object_count":  1
+    },
+    {
+        "status":  "exported",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_Works_like_core_1.1_37d8962b.glb",
+        "bytes":  4612,
+        "relativeFile":  "/models/rhino-components-optimized/block_Works_like_core_1.1_37d8962b.glb",
+        "objects":  [
+                        {
+                            "name":  "Works_like_core_1.1",
+                            "bbox_volume":  10000.000000000015,
+                            "groups":  "",
+                            "type":  "InstanceReference",
+                            "id":  "37d8962b-ed2e-4d5d-ad40-c93930204468"
+                        }
+                    ],
+        "key":  "block_Works_like_core_1.1_37d8962b",
+        "object_count":  1
+    }
+]
