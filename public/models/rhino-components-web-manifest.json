@@ -154,9 +154,9 @@
     },
     {
         "status":  "exported",
-        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
         "bytes":  156020,
-        "relativeFile":  "/models/rhino-components-optimized/block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
+        "relativeFile":  "/models/rhino-components-web/block_3D_PCB1_2025-03-17_v1_72a1b1c8.glb",
         "objects":  [
                         {
                             "name":  "3D_PCB1_2025-03-17 v1",
@@ -171,9 +171,9 @@
     },
     {
         "status":  "exported",
-        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_Works_like_core_1.1_080f1173.glb",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_080f1173.glb",
         "bytes":  126824,
-        "relativeFile":  "/models/rhino-components-optimized/block_Works_like_core_1.1_080f1173.glb",
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_080f1173.glb",
         "objects":  [
                         {
                             "name":  "Works_like_core_1.1",
@@ -188,9 +188,9 @@
     },
     {
         "status":  "exported",
-        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-optimized\\block_Works_like_core_1.1_37d8962b.glb",
+        "file":  "C:\\Users\\Jake\\Documents\\GitHub\\NaRa\\public\\models\\rhino-components-web\\block_Works_like_core_1.1_37d8962b.glb",
         "bytes":  4612,
-        "relativeFile":  "/models/rhino-components-optimized/block_Works_like_core_1.1_37d8962b.glb",
+        "relativeFile":  "/models/rhino-components-web/block_Works_like_core_1.1_37d8962b.glb",
         "objects":  [
                         {
                             "name":  "Works_like_core_1.1",
