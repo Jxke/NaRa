@@ -684,3 +684,26 @@ details[open] .gallery-toggle::before {
   font: 12px var(--font-ui);
   color: var(--ink-3);
 }
+
+.share-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 28px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+  font: 14px var(--font-ui);
+}
+
+.share-footer .label,
+.share-footer ul {
+  margin: 0;
+}
+
+.share-footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding: 0;
+  list-style: none;
+}

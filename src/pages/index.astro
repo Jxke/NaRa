@@ -6,6 +6,21 @@ import Press from "../components/Press.astro";
 import { readSanity } from "../lib/sanity.js";
 import { defaultAbout } from "../lib/about-content.js";
 
+const siteUrl = "https://nara.design/";
+const pageTitle = "NaRa | Think Authentically, again.";
+const pageDescription = "NaRa is a palm-sized physical AI oracle that uses three glyphs and one word to help you reflect and find your own answers.";
+const socialImage = new URL("/assets/nara-og.jpg", siteUrl).href;
+const socialImageAlt = "NaRa’s Think Authentically, again. headline beside three translucent NaRa devices.";
+const shareUrl = encodeURIComponent(siteUrl);
+const shareTitle = encodeURIComponent(pageTitle);
+const shareLinks = [
+  ["LinkedIn", `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`],
+  ["X", `https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareTitle}`],
+  ["WhatsApp", `https://wa.me/?text=${shareTitle}%20${shareUrl}`],
+  ["Email", `mailto:?subject=${shareTitle}&body=${shareUrl}`],
+];
+const websiteData = { "@context": "https://schema.org", "@type": "WebSite", name: "NaRa", url: siteUrl };
+
 const glyphs = [
   "opening",
   "clarity",
@@ -40,11 +55,25 @@ const chapters = [
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/assets/glyphs/illusion.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="NaRa is a palm-sized physical digital oracle for personal reflection, cognitive sovereignty, and restrained AI."
-    />
-    <title>NaRa | Think Authentically, again.</title>
+    <link rel="canonical" href={siteUrl} />
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NaRa" />
+    <meta property="og:url" content={siteUrl} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDescription} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={socialImageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={pageDescription} />
+    <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content={socialImageAlt} />
+    <script type="application/ld+json" set:html={JSON.stringify(websiteData)} />
   </head>
   <body>
     <div class="progress" aria-hidden="true"><span></span></div>
@@ -205,6 +234,15 @@ const chapters = [
         <a class="button" href="#top">Return up ↑</a>
       </section>
     </main>
+
+    <footer class="share-footer panel" aria-label="Share NaRa">
+      <p class="label">Share NaRa</p>
+      <ul>
+        {shareLinks.map(([label, href]) => (
+          <li><a href={href}>{label}</a></li>
+        ))}
+      </ul>
+    </footer>
 
     <script>
       const reveals = [...document.querySelectorAll(".reveal")];

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nara.design/sitemap.xml
