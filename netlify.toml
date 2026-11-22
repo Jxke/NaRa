@@ -11,3 +11,15 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[redirects]]
+  from = "https://nara-ai.netlify.app/*"
+  to = "https://nara.design/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://nara-ai.netlify.app/*"
+  to = "https://nara.design/:splat"
+  status = 301
+  force = true
