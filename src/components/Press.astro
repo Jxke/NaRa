@@ -1,0 +1,38 @@
+---
+import { getPressEntries } from "../lib/press.js";
+
+const entries = await getPressEntries();
+---
+
+<section id="press" class="panel editorial">
+  <h2>Press</h2>
+  <ul class="press-list">
+    {entries.map(({ kind, title, url, photos }) => (
+      <li>
+        {url ? (
+          <a class="press-row" href={url}>
+            <span class="label">{kind}</span>
+            <h3>{title}</h3>
+            <span aria-hidden="true">↗</span>
+          </a>
+        ) : photos?.length ? (
+          <details>
+            <summary class="press-row">
+              <span class="label">{kind}</span>
+              <span class="press-title">{title}</span>
+              <span class="gallery-toggle" aria-hidden="true"></span>
+            </summary>
+            <div class="press-photos">
+              {photos.map(({ src, alt }) => <img src={src} alt={alt} loading="lazy" />)}
+            </div>
+          </details>
+        ) : (
+          <div class="press-row">
+            <span class="label">{kind}</span>
+            <h3>{title}</h3>
+          </div>
+        )}
+      </li>
+    ))}
+  </ul>
+</section>

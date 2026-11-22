@@ -1,6 +1,9 @@
 ---
 import ExoskeletonHero from "../components/ExoskeletonHero.astro";
 import "../styles/global.css";
+import Press from "../components/Press.astro";
+import { readSanity } from "../lib/sanity.js";
+import { defaultAbout } from "../lib/about-content.js";
 
 const glyphs = [
   "opening",
@@ -11,8 +14,15 @@ const glyphs = [
   "harmony",
   "courage",
   "illusion",
-  "error",
+  "balance",
 ];
+
+export const prerender = false;
+
+const about = await readSanity(
+  '*[_type == "naraAbout" && _id == "nara-about"][0]{intro, team}',
+  defaultAbout
+);
 
 const chapters = [
   ["01", "Need", "uncertainty creates the demand for instant resolution"],
@@ -31,7 +41,7 @@ const chapters = [
       name="description"
       content="NaRa is a palm-sized physical digital oracle for personal reflection, cognitive sovereignty, and restrained AI."
     />
-    <title>NaRa - ur digital oracle</title>
+    <title>NaRa | Think Authentically, again.</title>
   </head>
   <body>
     <div class="progress" aria-hidden="true"><span></span></div>
@@ -42,22 +52,20 @@ const chapters = [
         <a href="#system">System</a>
         <a href="#glyphs">Glyphs</a>
         <a href="#prototype">Prototype</a>
+        <a href="#press">Press</a>
+        <a href="#about">About Us</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero panel reveal">
         <div class="hero-copy">
-          <p class="eyebrow">☼ studio ii / 2026 / ur digital oracle</p>
-          <h1>NaRa gives you less answer, so you can hear more of yourself.</h1>
-          <p>
-            A palm-sized physical AI oracle designed to intercept moments of
-            cognitive offloading and turn them into slower, self-authored
-            reflection.
-          </p>
+          <h1>Think Authentically, again.</h1>
+          <p>NaRa gives you less answer, so you can hear more of yourself.</p>
         </div>
         <figure class="hero-media">
           <ExoskeletonHero />
+          <figcaption>Try me</figcaption>
         </figure>
       </section>
 
@@ -100,7 +108,9 @@ const chapters = [
         <div class="sticky-visual">
           <div class="oracle-screen" aria-hidden="true">
             <div class="glyph-row">
-              <span>◎</span><span>〰</span><span>○</span>
+              {["opening", "clarity", "dialogue"].map((glyph) => (
+                <img src={`/assets/glyphs/${glyph}.png`} alt="" width="72" height="72" />
+              ))}
             </div>
             <p>OPENING</p>
           </div>
@@ -162,15 +172,34 @@ const chapters = [
           </p>
         </div>
         <div class="product-images">
-          <img src="/assets/nara-stack.jpg" alt="Stacked pink NaRa prototype components." loading="lazy" />
-          <img src="/assets/nara-soft-blocks.jpg" alt="Soft pink prototype blocks for NaRa form exploration." loading="lazy" />
+          <img src="/assets/prototype/dscf0042.jpg" alt="Three translucent NaRa devices in teal, lime, and amber." loading="lazy" />
+          <img src="/assets/prototype/dscf0051.jpg" alt="NaRa circuit board with its screen and controls exposed." loading="lazy" />
         </div>
+      </section>
+
+      <Press />
+
+      <section id="about" class="panel editorial">
+        <h2>About Us</h2>
+        <p>{about.intro}</p>
+        <ul class="team-list">
+          {(about.team ?? []).map(({ name, bio, website, email }) => (
+            <li>
+              <h3>{name}</h3>
+              <p>{bio}</p>
+              {(website || email) && <p class="team-links">
+                {website && <a href={website} aria-label={`${name} website`}>{website.includes("linkedin.com/") ? "LinkedIn" : "Website"}</a>}
+                {email && <a href={`mailto:${email}`} aria-label={`Email ${name}`}>Email</a>}
+              </p>}
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section class="closing reveal">
         <p class="eyebrow">∞ position</p>
         <h2>NaRa does not resist aid in decision-making. It refuses to surrender agency over the process.</h2>
-        <a class="button" href="#top">return to oracle ↑</a>
+        <a class="button" href="#top">Return up ↑</a>
       </section>
     </main>
 
@@ -188,23 +217,36 @@ const chapters = [
 
       const progress = document.querySelector(".progress span");
       const oracleWord = document.querySelector(".oracle-screen p");
-      const oracleGlyphs = document.querySelectorAll(".glyph-row span");
+      const oracleGlyphs = document.querySelectorAll(".glyph-row img");
+      const steps = [...document.querySelectorAll(".step")];
       const words = ["NEED", "PAUSE", "OPENING", "RETURN"];
-      const sets = [["?", "!", "..."], ["□", "◊", "☾"], ["◎", "〰", "○"], ["←", "☼", "→"]];
+      const sets = [
+        ["opening", "clarity", "dialogue"],
+        ["structure", "transition", "illusion"],
+        ["opening", "courage", "harmony"],
+        ["balance", "clarity", "transition"],
+      ];
+      let activeChapter = -1;
 
       function updateScrollState() {
         const height = document.documentElement.scrollHeight - window.innerHeight;
         const ratio = height > 0 ? window.scrollY / height : 0;
-        progress.style.transform = `scaleX(${ratio})`;
+        if (progress instanceof HTMLElement) progress.style.transform = `scaleX(${ratio})`;
 
-        const chapter = Math.min(3, Math.floor(ratio * 4.2));
-        oracleWord.textContent = words[chapter];
+        const chapter = Math.max(0, steps.findLastIndex((step) =>
+          step.getBoundingClientRect().top <= window.innerHeight * 0.55
+        ));
+        if (chapter === activeChapter) return;
+
+        activeChapter = chapter;
+        if (oracleWord) oracleWord.textContent = words[chapter];
         oracleGlyphs.forEach((glyph, index) => {
-          glyph.textContent = sets[chapter][index];
+          glyph.setAttribute("src", `/assets/glyphs/${sets[chapter][index]}.png`);
         });
       }
 
       updateScrollState();
+      window.addEventListener("resize", updateScrollState);
       window.addEventListener("scroll", updateScrollState, { passive: true });
     </script>
   </body>

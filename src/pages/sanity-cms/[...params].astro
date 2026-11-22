@@ -1,0 +1,29 @@
+---
+export const prerender = false
+import SanityStudio from '../../studio/Studio'
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NaRa CMS</title>
+    <meta name="robots" content="noindex, nofollow" />
+    {import.meta.env.DEV && <script is:inline type="module">
+      import RefreshRuntime from "/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>}
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      #sanity-studio { height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="sanity-studio">
+      <SanityStudio client:only="react" />
+    </div>
+  </body>
+</html>
