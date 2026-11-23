@@ -21,20 +21,45 @@ export default defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({ name: "order", title: "Display order", type: "number", initialValue: 100 }),
+    defineField({ name: "date", title: "Date", type: "date" }),
+    defineField({
+      name: "description",
+      title: "Our write-up",
+      type: "text",
+      rows: 8,
+      description: "Your own words about this entry. Leave a blank line between paragraphs.",
+    }),
     defineField({
       name: "url",
-      title: "External link",
+      title: "Main external link",
       type: "url",
       validation: (rule) => rule.uri({ scheme: ["https", "http"] }),
     }),
     defineField({
+      name: "links",
+      title: "More links",
+      type: "array",
+      of: [defineArrayMember({
+        type: "object",
+        fields: [
+          defineField({ name: "label", type: "string", validation: (rule) => rule.required() }),
+          defineField({
+            name: "url",
+            type: "url",
+            validation: (rule) => rule.required().uri({ scheme: ["https", "http", "mailto"] }),
+          }),
+        ],
+        preview: { select: { title: "label", subtitle: "url" } },
+      })],
+    }),
+    defineField({
       name: "photos",
       type: "array",
-      description: "Leave the external link blank to show a gallery on the NaRa site.",
       of: [defineArrayMember({
         type: "image",
         fields: [
           defineField({ name: "alt", title: "Alt text", type: "string", validation: (rule) => rule.required() }),
+          defineField({ name: "caption", type: "string" }),
         ],
       })],
     }),

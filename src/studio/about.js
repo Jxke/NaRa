@@ -11,6 +11,12 @@ export default defineType({
   fields: [
     defineField({ name: "intro", type: "text", validation: (rule) => rule.required() }),
     defineField({
+      name: "contactEmail",
+      title: "Team contact email",
+      type: "email",
+      description: "Shown as its own contact line below the introduction.",
+    }),
+    defineField({
       name: "team",
       type: "array",
       of: [defineArrayMember({

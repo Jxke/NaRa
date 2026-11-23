@@ -1,0 +1,115 @@
+---
+import GoogleTagManager from "../components/GoogleTagManager.astro";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  path?: string;
+  current?: "home" | "about";
+}
+
+const siteUrl = "https://nara.design/";
+const defaultTitle = "NaRa | Think Authentically, again.";
+const defaultDescription = "NaRa is a palm-sized physical AI oracle that uses three glyphs and one word to help you reflect and find your own answers.";
+
+const {
+  title = defaultTitle,
+  description = defaultDescription,
+  path = "/",
+  current = "home",
+} = Astro.props;
+
+const pageUrl = new URL(path, siteUrl).href;
+const socialImage = new URL("/assets/nara-og.jpg", siteUrl).href;
+const socialImageAlt = "NaRa’s Think Authentically, again. headline beside three translucent NaRa devices.";
+const shareUrl = encodeURIComponent(siteUrl);
+const shareTitle = encodeURIComponent(defaultTitle);
+const shareLinks = [
+  ["LinkedIn", `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`],
+  ["X", `https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareTitle}`],
+  ["WhatsApp", `https://wa.me/?text=${shareTitle}%20${shareUrl}`],
+  ["Email", `mailto:?subject=${shareTitle}&body=${shareUrl}`],
+];
+const websiteData = { "@context": "https://schema.org", "@type": "WebSite", name: "NaRa", url: siteUrl };
+const homeHref = current === "home" ? "" : "/";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <GoogleTagManager />
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/assets/glyphs/illusion.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="canonical" href={pageUrl} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NaRa" />
+    <meta property="og:url" content={pageUrl} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={socialImageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content={socialImageAlt} />
+    <script type="application/ld+json" set:html={JSON.stringify(websiteData)} />
+  </head>
+  <body>
+    <div class="progress" aria-hidden="true"><span></span></div>
+
+    <header class="site-header">
+      <a class="wordmark" href={current === "home" ? "#top" : "/"} aria-label="NaRa home">NaRa</a>
+      <nav aria-label="Site">
+        <a href={`${homeHref}#system`}>System</a>
+        <a href={`${homeHref}#glyphs`}>Glyphs</a>
+        <a href={`${homeHref}#prototype`}>Prototype</a>
+        <a href={`${current === "about" ? "" : "/about"}#about`}>About Us</a>
+        <a href={`${current === "about" ? "" : "/about"}#press`}>Press</a>
+      </nav>
+    </header>
+
+    <main id="top" class={current === "home" ? undefined : "subpage"}>
+      <slot />
+    </main>
+
+    <footer class="share-footer panel" aria-label="Share NaRa">
+      <p class="label">Share NaRa</p>
+      <ul>
+        {shareLinks.map(([label, href]) => (
+          <li><a href={href}>{label}</a></li>
+        ))}
+      </ul>
+    </footer>
+
+    <script>
+      const reveals = [...document.querySelectorAll(".reveal")];
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) entry.target.classList.add("is-visible");
+          });
+        },
+        { threshold: 0.18 }
+      );
+      reveals.forEach((item) => observer.observe(item));
+
+      const progress = document.querySelector(".progress span");
+      function updateProgress() {
+        const height = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = height > 0 ? window.scrollY / height : 0;
+        if (progress instanceof HTMLElement) progress.style.transform = `scaleX(${ratio})`;
+      }
+      updateProgress();
+      window.addEventListener("resize", updateProgress);
+      window.addEventListener("scroll", updateProgress, { passive: true });
+    </script>
+  </body>
+</html>

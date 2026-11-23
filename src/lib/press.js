@@ -6,9 +6,12 @@ const query = `*[_type == "naraPressEntry"] {
   "id": slug.current,
   kind,
   title,
+  date,
+  description,
   url,
+  "links": links[defined(url)][]{label, url},
   order,
-  "photos": photos[defined(asset->url)][]{"src": asset->url, alt}
+  "photos": photos[defined(asset->url)][]{"src": asset->url, alt, caption}
 }`;
 
 export async function getPressEntries() {

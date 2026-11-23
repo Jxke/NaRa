@@ -8,5 +8,6 @@ export default defineConfig({
   redirects: {
     "/studio": { status: 301, destination: "/sanity-cms" },
     "/sanitycms": { status: 301, destination: "/sanity-cms" },
+    "/press": { status: 301, destination: "/about#press" },
   },
 });

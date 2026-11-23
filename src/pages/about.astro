@@ -1,0 +1,64 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Press from "../components/Press.astro";
+import { readSanity } from "../lib/sanity.js";
+import { defaultAbout } from "../lib/about-content.js";
+
+export const prerender = false;
+
+const about = await readSanity(
+  '*[_type == "naraAbout" && _id == "nara-about"][0]{intro, contactEmail, team}',
+  defaultAbout
+);
+
+const introParagraphs = (about.intro ?? "")
+  .split(/\n\s*\n/)
+  .map((p) => p.trim())
+  .filter(Boolean);
+const contactEmail = about.contactEmail || defaultAbout.contactEmail;
+---
+
+<Layout
+  title="About Us & Press | NaRa"
+  description="The team behind NaRa, from Harvard's Master in Design Engineering program, and press coverage of the project."
+  path="/about"
+  current="about"
+>
+  <section id="about" class="panel page-intro">
+    <p class="eyebrow">☺ the team</p>
+    <h1>About Us</h1>
+    {introParagraphs.map((p) => <p>{p}</p>)}
+  </section>
+
+  {contactEmail && (
+    <section class="panel contact-block" aria-label="Contact">
+      <p class="label">Contact the team</p>
+      <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+    </section>
+  )}
+
+  <section class="panel">
+    <ul class="team-list">
+      {(about.team ?? []).map(({ name, bio, website, email }) => (
+        <li>
+          <h3>{name}</h3>
+          <p>{bio}</p>
+          {(website || email) && <p class="team-links">
+            {website && <a href={website} aria-label={`${name} website`}>{website.includes("linkedin.com/") ? "LinkedIn" : "Website"}</a>}
+            {email && <a href={`mailto:${email}`} aria-label={`Email ${name}`}>Email</a>}
+          </p>}
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section id="press" class="panel page-intro page-intro-split">
+    <p class="eyebrow">✦ press</p>
+    <h2>Press</h2>
+    <p>Exhibitions, articles, and presentations featuring NaRa.</p>
+  </section>
+
+  <section class="panel">
+    <Press />
+  </section>
+</Layout>
